@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { listRows, getSimInput, getForecastDirect, getRawSimulate } from '../api/items.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
@@ -566,7 +566,6 @@ function SimulationPanel({ item, histories = [] }) {
     onError: (err) => { setError(err.response?.data?.detail || err.message || 'Villa í hermun') },
   })
 
-  useEffect(() => { mutation.mutate() }, [])
 
   const dailyData = useMemo(() => {
     if (!simData) return []
@@ -923,6 +922,12 @@ export default function NoisPage() {
   const [search, setSearch] = useState('')
   const [selectedItem, setSelectedItem] = useState(null)
   const [activeTab, setActiveTab] = useState('simulation')
+  const [usageMin, setUsageMin] = useState('')
+  const [moveMin, setMoveMin] = useState('')
+  const [viewMode, setViewMode] = useState('table') // 'table' | 'cards'
+  const [itemNumberFilter, setItemNumberFilter] = useState('')
+  const [descFilter, setDescFilter] = useState('')
+  const [productGroupFilter, setProductGroupFilter] = useState('')
 
   const { data: allItems = [], isLoading } = useQuery({
     queryKey: ['noi-items'],
@@ -946,7 +951,7 @@ export default function NoisPage() {
     queryKey: ['noi-forecast-direct', selectedItem?.id],
     queryFn: () =>
       getForecastDirect(selectedItem.id, {
-        forecast_periods: 6,
+        forecast_periods: 12,
         mode: 'local',
         local_model: 'auto_ets',
         season_length: 12,
@@ -955,15 +960,42 @@ export default function NoisPage() {
     enabled: !!selectedItem,
   })
 
+  const productGroups = useMemo(() =>
+    [...new Set(allItems.map((i) => i.product_group_name).filter(Boolean))].sort(),
+    [allItems],
+  )
+
   const filteredItems = useMemo(() => {
-    if (!search.trim()) return allItems
-    const q = search.toLowerCase()
-    return allItems.filter((item) =>
-      [item.item_number, item.description, item.location_name, item.vendor_name].some((v) =>
-        String(v || '').toLowerCase().includes(q),
-      ),
-    )
-  }, [allItems, search])
+    let items = allItems
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      items = items.filter((item) =>
+        [item.item_number, item.description, item.location_name, item.vendor_name].some((v) =>
+          String(v || '').toLowerCase().includes(q),
+        ),
+      )
+    }
+    if (itemNumberFilter.trim()) {
+      const q = itemNumberFilter.toLowerCase()
+      items = items.filter((item) => String(item.item_number || '').toLowerCase().includes(q))
+    }
+    if (descFilter.trim()) {
+      const q = descFilter.toLowerCase()
+      items = items.filter((item) => String(item.description || '').toLowerCase().includes(q))
+    }
+    if (productGroupFilter) {
+      items = items.filter((item) => item.product_group_name === productGroupFilter)
+    }
+    if (usageMin !== '') {
+      const min = Number(usageMin)
+      if (!isNaN(min)) items = items.filter((item) => (item.last_year_usage ?? 0) >= min)
+    }
+    if (moveMin !== '') {
+      const min = Number(moveMin)
+      if (!isNaN(min)) items = items.filter((item) => (item.num_move_last_three_years ?? 0) >= min)
+    }
+    return items
+  }, [allItems, search, itemNumberFilter, descFilter, productGroupFilter, usageMin, moveMin])
 
   return (
     <div className="fade-in space-y-4">
@@ -975,33 +1007,113 @@ export default function NoisPage() {
             {isLoading ? 'Hleð…' : `${filteredItems.length} / ${allItems.length} hlutir`}
           </p>
         </div>
-        <div className="relative w-64">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">⌕</span>
+        <div className="flex items-center gap-3">
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+            {[{ value: 'table', icon: '▤' }, { value: 'cards', icon: '⊞' }].map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setViewMode(opt.value)}
+                className={`px-3 py-1.5 text-sm transition-colors ${
+                  viewMode === opt.value
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                {opt.icon}
+              </button>
+            ))}
+          </div>
+          <div className="relative w-64">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">⌕</span>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setSelectedItem(null) }}
+              placeholder="Leita…"
+              className="input-field pl-8 py-1.5"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-xl px-4 py-3 border border-gray-100 shadow-sm space-y-2">
+        <div className="flex items-center gap-3 flex-wrap">
           <input
             type="text"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setSelectedItem(null) }}
-            placeholder="Leita…"
-            className="input-field pl-8 py-1.5"
+            value={itemNumberFilter}
+            onChange={(e) => { setItemNumberFilter(e.target.value); setSelectedItem(null) }}
+            placeholder="Hlut #…"
+            className="input-field py-1 text-sm w-32"
           />
+          <input
+            type="text"
+            value={descFilter}
+            onChange={(e) => { setDescFilter(e.target.value); setSelectedItem(null) }}
+            placeholder="Lýsing…"
+            className="input-field py-1 text-sm w-48"
+          />
+          <select
+            value={productGroupFilter}
+            onChange={(e) => { setProductGroupFilter(e.target.value); setSelectedItem(null) }}
+            className="input-field py-1 text-sm w-48"
+          >
+            <option value="">Allir vöruhópar</option>
+            {productGroups.map((g) => <option key={g} value={g}>{g}</option>)}
+          </select>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-gray-500 whitespace-nowrap">Notkun ≥</span>
+            <input
+              type="number"
+              min="0"
+              value={usageMin}
+              onChange={(e) => setUsageMin(e.target.value)}
+              placeholder="0"
+              className="w-20 input-field py-1 text-sm"
+            />
+          </div>
+          <div className="w-px h-5 bg-gray-200" />
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-gray-500 whitespace-nowrap">Hreyfingar (3 ár) ≥</span>
+            <input
+              type="number"
+              min="0"
+              value={moveMin}
+              onChange={(e) => setMoveMin(e.target.value)}
+              placeholder="0"
+              className="w-20 input-field py-1 text-sm"
+            />
+          </div>
+          {(itemNumberFilter || descFilter || productGroupFilter || usageMin !== '' || moveMin !== '') && (
+            <button
+              type="button"
+              onClick={() => { setItemNumberFilter(''); setDescFilter(''); setProductGroupFilter(''); setUsageMin(''); setMoveMin('') }}
+              className="ml-auto text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              Hreinsa síur ×
+            </button>
+          )}
         </div>
       </div>
 
       {/* Split layout */}
       <div className="flex gap-5 items-start">
-        {/* Left: Table */}
-        <div className="flex-1 min-w-0 card p-0 overflow-hidden">
+        {/* Left: Table or Cards */}
+        <div className="flex-1 min-w-0">
           {isLoading ? (
-            <div className="flex items-center justify-center py-20">
+            <div className="card flex items-center justify-center py-20">
               <LoadingSpinner message="Hleð Noi hlutum…" />
             </div>
           ) : filteredItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="card flex flex-col items-center justify-center py-16 text-center">
               <span className="text-4xl mb-3">📭</span>
               <p className="text-gray-500">Engir hlutir fundust</p>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
+          ) : viewMode === 'table' ? (
+            <div className="card p-0 overflow-hidden overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-200">
@@ -1035,6 +1147,96 @@ export default function NoisPage() {
                   })}
                 </tbody>
               </table>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
+              {filteredItems.map((item) => {
+                const isSelected = selectedItem?.id === item.id
+                const miniChartData = isSelected
+                  ? mergeHistoryAndForecast(histories, forecastData).slice(-24)
+                  : null
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => { setSelectedItem(isSelected ? null : item); setActiveTab('simulation') }}
+                    className={`bg-white rounded-xl border-2 p-4 cursor-pointer transition-all hover:shadow-md ${
+                      isSelected ? 'border-blue-500 shadow-md' : 'border-gray-100 hover:border-blue-200'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <span className="badge badge-blue font-mono text-xs">{item.item_number}</span>
+                      {item.purchasing_method && (
+                        <span className="text-xs text-gray-400 font-medium">{item.purchasing_method}</span>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium text-gray-800 leading-snug mb-1 line-clamp-2">
+                      {item.description?.trim() || '—'}
+                    </p>
+                    <p className="text-xs text-gray-400 mb-3">{item.location_name || '—'}</p>
+                    <div className="grid grid-cols-3 gap-1.5 text-center mb-2">
+                      <div className="bg-gray-50 rounded-lg py-1.5">
+                        <p className="text-xs text-gray-400 mb-0.5">Lager</p>
+                        <p className="text-sm font-semibold text-gray-700">{fmt(item.stock_level, 1)}</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg py-1.5">
+                        <p className="text-xs text-gray-400 mb-0.5">Notkun/ár</p>
+                        <p className="text-sm font-semibold text-gray-700">{fmt(item.last_year_usage)}</p>
+                      </div>
+                      <div className="bg-blue-50 rounded-lg py-1.5">
+                        <p className="text-xs text-blue-400 mb-0.5">Tillaga</p>
+                        <p className="text-sm font-semibold text-blue-700">{fmt(item.purchase_suggestion)}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5 text-center mb-3">
+                      <div className="bg-gray-50 rounded-lg py-1.5">
+                        <p className="text-xs text-gray-400 mb-0.5">Hreyf. 1 ár</p>
+                        <p className="text-sm font-semibold text-gray-700">{fmt(item.num_move_last_year)}</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg py-1.5">
+                        <p className="text-xs text-gray-400 mb-0.5">Hreyf. 2 ár</p>
+                        <p className="text-sm font-semibold text-gray-700">{fmt(item.num_move_last_two_years)}</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg py-1.5">
+                        <p className="text-xs text-gray-400 mb-0.5">Hreyf. 3 ár</p>
+                        <p className="text-sm font-semibold text-gray-700">{fmt(item.num_move_last_three_years)}</p>
+                      </div>
+                    </div>
+                    {isSelected ? (
+                      miniChartData?.length > 0 ? (
+                        <div className="mt-1 -mx-1">
+                          <p className="text-xs text-gray-400 mb-1 px-1">Saga og spá (12 mán. spá)</p>
+                          <ResponsiveContainer width="100%" height={120}>
+                            <LineChart data={miniChartData} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#f0f4f8" vertical={false} />
+                              <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#9ca3af' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                              <YAxis tick={{ fontSize: 9, fill: '#9ca3af' }} tickLine={false} axisLine={false} width={38} tickFormatter={(v) => fmt(v)} />
+                              <Tooltip
+                                contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '11px' }}
+                                formatter={(v, name) => [fmt(v, 1), name === 'actual_qty' ? 'Neysla' : 'Spá']}
+                              />
+                              <Line type="monotone" dataKey="actual_qty" stroke="#2563eb" strokeWidth={2} dot={false} connectNulls={false} />
+                              <Line type="monotone" dataKey="forecast_qty" stroke="#f59e0b" strokeWidth={1.5} dot={false} strokeDasharray="4 3" connectNulls={false} />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      ) : (
+                        <div className="h-[120px] flex items-center justify-center text-xs text-gray-300 bg-gray-50 rounded-lg">
+                          {simInputData ? 'Engin saga' : 'Hleð…'}
+                        </div>
+                      )
+                    ) : (
+                      <div className="h-[60px] flex items-end gap-px px-1">
+                        {Array.from({ length: 12 }, (_, i) => {
+                          const seed = ((item.id ?? 0) * 31 + i * 17) % 100
+                          return (
+                            <div key={i} className="flex-1 bg-gray-100 rounded-sm" style={{ height: `${25 + Math.sin(i * 0.9 + seed) * 15 + (seed % 25)}%` }} />
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
