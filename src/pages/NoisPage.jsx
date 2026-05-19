@@ -342,7 +342,7 @@ function HistoryPanel({ item, histories, forecastData, loading, forecastLoading 
     <div className="fade-in">
       <div className="flex items-start justify-between mb-4">
         <div>
-          <h2 className="section-title">Neyslusaga</h2>
+          <h2 className="section-title">Saga</h2>
           <p className="text-sm text-gray-500 mt-0.5">
             <span className="font-mono font-semibold text-blue-600">{item.item_number}</span>
             {' · '}{item.description?.trim() || '—'}
@@ -392,7 +392,7 @@ function HistoryPanel({ item, histories, forecastData, loading, forecastLoading 
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div>
-                <h3 className="text-xl font-bold text-slate-900">Neyslusaga og spá</h3>
+                <h3 className="text-xl font-bold text-slate-900">Saga og spá</h3>
                 <p className="text-sm text-gray-500 mt-1">
                   <span className="font-mono font-semibold text-blue-600">{item.item_number}</span>
                   {' · '}{item.description?.trim() || '—'}
@@ -697,7 +697,8 @@ function SimulationPanel({ item, histories = [] }) {
       <div className="flex flex-col items-center justify-center py-12 text-center text-gray-400">
         <span className="text-3xl mb-3">📭</span>
         <p className="text-sm text-gray-500">Hermun ekki tiltæk fyrir þennan hlut</p>
-        <p className="text-xs mt-1 mb-4 font-mono text-gray-300">{item.item_number}</p>
+        <p className="text-xs mt-1 font-mono text-gray-300">{item.item_number} (id: {item.id})</p>
+        <p className="text-xs mt-1 mb-4 font-mono text-red-400 max-w-xs break-words">{error}</p>
         <button onClick={() => mutation.mutate()} className="btn-secondary text-xs py-1 px-3">Reyna aftur</button>
       </div>
     )

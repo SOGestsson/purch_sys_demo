@@ -11,9 +11,9 @@ export async function listTables() {
 /**
  * List rows from a specific table with optional pagination.
  */
-export async function listRows(tableName, { limit = 50, offset = 0 } = {}) {
+export async function listRows(tableName, { limit = 50, offset = 0, db = 'demo' } = {}) {
   const response = await dbClient.get(`/tables/${tableName}/rows`, {
-    params: { limit, offset },
+    params: { limit, offset, db },
   })
   const data = response.data
   return {
@@ -27,32 +27,32 @@ export async function listRows(tableName, { limit = 50, offset = 0 } = {}) {
 /**
  * Get a single row by ID.
  */
-export async function getRow(tableName, rowId) {
-  const response = await dbClient.get(`/tables/${tableName}/rows/${rowId}`)
+export async function getRow(tableName, rowId, { db = 'demo' } = {}) {
+  const response = await dbClient.get(`/tables/${tableName}/rows/${rowId}`, { params: { db } })
   return response.data?.row || response.data
 }
 
 /**
  * Create a new row in a table.
  */
-export async function createRow(tableName, data) {
-  const response = await dbClient.post(`/tables/${tableName}/rows`, data)
+export async function createRow(tableName, data, { db = 'demo' } = {}) {
+  const response = await dbClient.post(`/tables/${tableName}/rows`, data, { params: { db } })
   return response.data
 }
 
 /**
  * Update an existing row.
  */
-export async function updateRow(tableName, rowId, data) {
-  const response = await dbClient.put(`/tables/${tableName}/rows/${rowId}`, data)
+export async function updateRow(tableName, rowId, data, { db = 'demo' } = {}) {
+  const response = await dbClient.put(`/tables/${tableName}/rows/${rowId}`, data, { params: { db } })
   return response.data
 }
 
 /**
  * Delete a row.
  */
-export async function deleteRow(tableName, rowId) {
-  const response = await dbClient.delete(`/tables/${tableName}/rows/${rowId}`)
+export async function deleteRow(tableName, rowId, { db = 'demo' } = {}) {
+  const response = await dbClient.delete(`/tables/${tableName}/rows/${rowId}`, { params: { db } })
   return response.data
 }
 
@@ -66,7 +66,7 @@ async function findHistoryOffset(itemId, totalRows = 640000) {
   while (lo < hi) {
     const mid = Math.floor((lo + hi) / 2)
     const data = await dbClient.get('/tables/item_histories/rows', {
-      params: { limit: 1, offset: mid },
+      params: { limit: 1, offset: mid, db: 'demo' },
     })
     const row = data.data?.rows?.[0]
     if (!row) { hi = mid; continue }
@@ -83,7 +83,7 @@ export async function getItemHistories(itemId) {
   const startOffset = await findHistoryOffset(itemId)
   const safeOffset = Math.max(0, startOffset - 50)
   const response = await dbClient.get('/tables/item_histories/rows', {
-    params: { limit: 1000, offset: safeOffset },
+    params: { limit: 1000, offset: safeOffset, db: 'demo' },
   })
   const rows = response.data?.rows || []
   return rows.filter((r) => r.item_id === itemId)
@@ -98,8 +98,11 @@ export async function getSimInput(
     number_of_days = 900,
     number_of_simulations = 1000,
     service_level = 0.95,
+    lead_time,
+    order_freq,
     start_day,
     end_day,
+    db = 'demo',
   } = {},
 ) {
   const response = await dbClient.get(`/sim-input/${itemId}`, {
@@ -109,9 +112,18 @@ export async function getSimInput(
       service_level,
       start_day,
       end_day,
+      db,
     },
   })
-  return response.data
+  const data = response.data
+  if (lead_time != null || order_freq != null) {
+    data.sim_rio_items = data.sim_rio_items?.map((item) => ({
+      ...item,
+      ...(lead_time != null && { del_time: lead_time }),
+      ...(order_freq != null && { buy_freq: order_freq }),
+    }))
+  }
+  return data
 }
 
 /**
@@ -127,6 +139,7 @@ export async function getForecastInput(
     freq = 'M',
     start_day,
     end_day,
+    db = 'demo',
   } = {},
 ) {
   const response = await dbClient.get(`/forecast-input/${itemId}`, {
@@ -138,6 +151,7 @@ export async function getForecastInput(
       freq,
       start_day,
       end_day,
+      db,
     },
   })
   return response.data
@@ -166,6 +180,7 @@ export async function runSimulation(simInput) {
 export async function getForecastDirect(
   itemId,
   {
+    db = 'demo',
     forecast_periods = 6,
     mode = 'local',
     local_model = 'auto_ets',
@@ -174,7 +189,7 @@ export async function getForecastDirect(
   } = {},
 ) {
   const response = await pipelineClient.get(`/forecast/${itemId}`, {
-    params: { forecast_periods, mode, local_model, season_length, freq },
+    params: { db, forecast_periods, mode, local_model, season_length, freq },
   })
   return response.data
 }
@@ -197,7 +212,31 @@ export async function getRawSimulate(
   } = {},
 ) {
   const response = await pipelineClient.post(`/simulation/raw-simulate/${itemId}`, null, {
-    params: { order_freq, lead_time, service_level, forecast_periods, mode, local_model, season_length, freq },
+    params: { db: 'demo', order_freq, lead_time, service_level, forecast_periods, mode, local_model, season_length, freq },
   })
+  return response.data
+}
+
+export async function getSimPrep(itemId, { db = 'Demo', number_of_simulations = 500, number_of_days = 900, service_level = 0.95 } = {}) {
+  const response = await pipelineClient.get(`/simulation/sim-prep/${itemId}`, {
+    params: { db, number_of_simulations, number_of_days, service_level },
+    timeout: 120000,
+  })
+  return response.data
+}
+
+export async function startMultiSimJob(itemIds, { db = 'Demo', number_of_simulations = 1000, number_of_days = 900, service_level = 0.95 } = {}) {
+  const params = new URLSearchParams()
+  itemIds.forEach((id) => params.append('item_ids', id))
+  params.append('db', db)
+  params.append('number_of_simulations', number_of_simulations)
+  params.append('number_of_days', number_of_days)
+  params.append('service_level', service_level)
+  const response = await pipelineClient.post(`/simulation/multi-sim/async?${params.toString()}`, null, { timeout: 15000 })
+  return response.data
+}
+
+export async function getJobStatus(jobId) {
+  const response = await pipelineClient.get(`/jobs/${jobId}`, { timeout: 10000 })
   return response.data
 }

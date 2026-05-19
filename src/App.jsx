@@ -10,6 +10,7 @@ import Items from './pages/Items.jsx'
 import ItemsPage from './pages/ItemsPage.jsx'
 import ItemDetail from './pages/ItemDetail.jsx'
 import NoisPage from './pages/NoisPage.jsx'
+import ItemCatalog from './pages/ItemCatalog.jsx'
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
         >
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="catalog" element={<ItemCatalog />} />
           <Route path="items" element={<Items />} />
           <Route path="items/:id" element={<ItemDetail />} />
           <Route path="stock" element={<ItemsPage />} />

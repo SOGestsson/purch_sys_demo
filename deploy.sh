@@ -3,7 +3,7 @@ set -e
 
 IMAGE="sogestsson/purch_sys_demo:latest"
 SSH_USER="siggi"
-SSH_HOST="raspberrypi.local"
+SSH_HOST="100.108.73.62"
 SSH_PASS="Superman"
 CONTAINER="purch-sys"
 

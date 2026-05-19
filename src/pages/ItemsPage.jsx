@@ -8,8 +8,10 @@ import {
   BarChart,
   Bar,
   Cell,
+  ComposedChart,
   LineChart,
   Line,
+  ReferenceArea,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -59,6 +61,11 @@ function aggregateByYear(rows) {
 const BAR_COLORS = ['#93c5fd', '#60a5fa', '#3b82f6', '#2563eb', '#1d4ed8', '#1e3a8a']
 
 function HistoryChart({ item, histories, loading }) {
+  const [refAreaLeft, setRefAreaLeft] = useState(null)
+  const [refAreaRight, setRefAreaRight] = useState(null)
+  const [isSelecting, setIsSelecting] = useState(false)
+  const [zoomDomain, setZoomDomain] = useState(null)
+
   const filtered = useMemo(() => {
     if (!histories || !item) return []
     return histories.filter((h) => h.item_id === item.id)
@@ -67,16 +74,37 @@ function HistoryChart({ item, histories, loading }) {
   const chartData = useMemo(() => aggregateByMonth(filtered), [filtered])
   const yearData = useMemo(() => aggregateByYear(filtered), [filtered])
 
-  const total = chartData.reduce((s, d) => s + d.qty, 0)
-  const avg = chartData.length ? total / chartData.length : 0
-  const peak = chartData.length ? Math.max(...chartData.map((d) => d.qty)) : 0
+  const visibleData = useMemo(() => {
+    if (!zoomDomain) return chartData
+    return chartData.slice(zoomDomain[0], zoomDomain[1] + 1)
+  }, [chartData, zoomDomain])
+
+  const total = visibleData.reduce((s, d) => s + d.qty, 0)
+  const avg = visibleData.length ? total / visibleData.length : 0
+  const peak = visibleData.length ? Math.max(...visibleData.map((d) => d.qty)) : 0
+
+  const handleMouseDown = (e) => {
+    if (e?.activeLabel) { setRefAreaLeft(e.activeLabel); setIsSelecting(true) }
+  }
+  const handleMouseMove = (e) => {
+    if (isSelecting && e?.activeLabel) setRefAreaRight(e.activeLabel)
+  }
+  const handleMouseUp = () => {
+    if (!isSelecting || !refAreaLeft || !refAreaRight) { setIsSelecting(false); return }
+    const li = chartData.findIndex((d) => d.month === refAreaLeft)
+    const ri = chartData.findIndex((d) => d.month === refAreaRight)
+    if (li !== -1 && ri !== -1 && li !== ri) {
+      setZoomDomain(li < ri ? [li, ri] : [ri, li])
+    }
+    setIsSelecting(false); setRefAreaLeft(null); setRefAreaRight(null)
+  }
 
   return (
     <div className="fade-in h-full flex flex-col">
       {/* Panel header */}
       <div className="flex items-start justify-between mb-5">
         <div>
-          <h2 className="section-title">Neyslusaga</h2>
+          <h2 className="section-title">Saga</h2>
           <p className="text-sm text-gray-500 mt-0.5">
             <span className="font-mono font-semibold text-blue-600">{item.item_number}</span>
             {' · '}
@@ -85,9 +113,16 @@ function HistoryChart({ item, histories, loading }) {
             <span className="text-gray-400">{item.location_name}</span>
           </p>
         </div>
-        {chartData.length > 0 && (
-          <span className="badge badge-blue">{chartData.length} mánuðir</span>
-        )}
+        <div className="flex items-center gap-2">
+          {zoomDomain && (
+            <button onClick={() => setZoomDomain(null)} className="btn-secondary text-xs py-0.5 px-2">
+              Zoom út
+            </button>
+          )}
+          {chartData.length > 0 && (
+            <span className="badge badge-blue">{visibleData.length}/{chartData.length} mán.</span>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -108,15 +143,16 @@ function HistoryChart({ item, histories, loading }) {
             <StatBox label="Hámarksneysla" value={fmt(peak)} />
           </div>
 
-          {/* Area chart */}
+          {/* Bar chart with drag-to-zoom */}
           <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="histGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.18} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                </linearGradient>
-              </defs>
+            <BarChart
+              data={visibleData}
+              margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              style={{ userSelect: 'none' }}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f4f8" vertical={false} />
               <XAxis
                 dataKey="month"
@@ -143,16 +179,11 @@ function HistoryChart({ item, histories, loading }) {
                 labelStyle={{ fontWeight: 600, color: '#1f2937', marginBottom: 4 }}
                 formatter={(v) => [fmt(v, 1), 'Neysla']}
               />
-              <Area
-                type="monotone"
-                dataKey="qty"
-                stroke="#3b82f6"
-                strokeWidth={2.5}
-                fill="url(#histGrad)"
-                dot={chartData.length <= 36}
-                activeDot={{ r: 5, fill: '#2563eb', strokeWidth: 0 }}
-              />
-            </AreaChart>
+              <Bar dataKey="qty" fill="#3b82f6" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+              {isSelecting && refAreaLeft && refAreaRight && (
+                <ReferenceArea x1={refAreaLeft} x2={refAreaRight} fill="#3b82f6" fillOpacity={0.15} />
+              )}
+            </BarChart>
           </ResponsiveContainer>
 
           {/* Yearly bar chart */}
@@ -168,7 +199,7 @@ function HistoryChart({ item, histories, loading }) {
                     contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', fontSize: '12px' }}
                     formatter={(v) => [fmt(v), 'Sala']}
                   />
-                  <Bar dataKey="qty" radius={[4, 4, 0, 0]}>
+                  <Bar dataKey="qty" radius={[4, 4, 0, 0]} isAnimationActive={false}>
                     {yearData.map((_, i) => (
                       <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
                     ))}
@@ -181,6 +212,24 @@ function HistoryChart({ item, histories, loading }) {
       )}
     </div>
   )
+}
+
+function weekKey(dateStr) {
+  const d = new Date(dateStr)
+  if (isNaN(d)) return null
+  const jan1 = new Date(d.getFullYear(), 0, 1)
+  const week = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7)
+  return `${d.getFullYear()}-W${String(week).padStart(2, '0')}`
+}
+
+function aggregateHistoryByWeek(rows) {
+  const weeks = {}
+  for (const r of rows) {
+    const key = weekKey(r.consumption_date)
+    if (!key) continue
+    weeks[key] = (weeks[key] || 0) + (Number(r.qty) || 0)
+  }
+  return weeks
 }
 
 function aggregateSimByWeek(rows) {
@@ -203,13 +252,72 @@ function aggregateSimByWeek(rows) {
     .map((w) => ({ ...w, inv: w.inv / w.n })) // avg inv per week
 }
 
-function SimulationTab({ item }) {
+const SIM_SERIES = [
+  { key: 'actual_qty', label: 'Saga',  color: '#f97316' },
+  { key: 'forecast',   label: 'Spá',   color: '#3b82f6' },
+  { key: 'inv',        label: 'Lager', color: '#6366f1' },
+  { key: 'purchase_qty', label: 'Kaup', color: '#10b981' },
+]
+
+const SIM_PARAMS_DEFAULT = {
+  number_of_days: 900,
+  number_of_simulations: 1000,
+  service_level: 0.95,
+  lead_time: null,
+  order_freq: null,
+}
+
+const SIM_PARAM_FIELDS = [
+  { key: 'number_of_days',        label: 'Fjöldi daga',           min: 30,  max: 3650, step: 30   },
+  { key: 'number_of_simulations', label: 'Fjöldi hermana',        min: 100, max: 5000, step: 100  },
+  { key: 'service_level',         label: 'Þjónustugildi (0–1)',   min: 0.5, max: 1,    step: 0.05 },
+  { key: 'lead_time',             label: 'Afhendingartími (dagar)', min: 0, max: 365,  step: 1    },
+  { key: 'order_freq',            label: 'Pöntunartíðni (dagar)', min: 1,  max: 365,  step: 1    },
+]
+
+function SimulationTab({ item, histories = [] }) {
   const [simData, setSimData] = useState(null)
   const [error, setError] = useState('')
+  const [params, setParams] = useState(SIM_PARAMS_DEFAULT)
+  const [showParams, setShowParams] = useState(false)
+  const [visible, setVisible] = useState(() => Object.fromEntries(SIM_SERIES.map((s) => [s.key, true])))
+  const [refAreaLeft, setRefAreaLeft] = useState(null)
+  const [refAreaRight, setRefAreaRight] = useState(null)
+  const [isSelecting, setIsSelecting] = useState(false)
+  const [zoomDomain, setZoomDomain] = useState(null)
+
+  const handleMouseDown = (e) => {
+    if (e?.activeLabel) { setRefAreaLeft(e.activeLabel); setIsSelecting(true) }
+  }
+  const handleMouseMove = (e) => {
+    if (isSelecting && e?.activeLabel) setRefAreaRight(e.activeLabel)
+  }
+  const handleMouseUp = (allData) => () => {
+    if (!isSelecting || !refAreaLeft || !refAreaRight) { setIsSelecting(false); return }
+    const li = allData.findIndex((d) => d.week === refAreaLeft)
+    const ri = allData.findIndex((d) => d.week === refAreaRight)
+    if (li !== -1 && ri !== -1 && li !== ri) setZoomDomain(li < ri ? [li, ri] : [ri, li])
+    setIsSelecting(false); setRefAreaLeft(null); setRefAreaRight(null)
+  }
+
+  const { data: simDefaults } = useQuery({
+    queryKey: ['sim-defaults', item.id],
+    queryFn: () => getSimInput(item.id, { number_of_days: 1, number_of_simulations: 1 }),
+  })
+
+  useEffect(() => {
+    if (!simDefaults) return
+    const item0 = simDefaults.sim_rio_items?.[0]
+    setParams((p) => ({
+      ...p,
+      lead_time: p.lead_time ?? item0?.del_time ?? null,
+      order_freq: p.order_freq ?? item0?.buy_freq ?? null,
+    }))
+  }, [simDefaults])
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const simInput = await getSimInput(item.id)
+      const simInput = await getSimInput(item.id, params)
       return runSimulation(simInput)
     },
     onSuccess: (data) => {
@@ -221,14 +329,30 @@ function SimulationTab({ item }) {
     },
   })
 
-  useEffect(() => {
-    mutation.mutate()
-  }, [])
+  const historyByWeek = useMemo(() => aggregateHistoryByWeek(histories), [histories])
+
 
   const chartData = useMemo(() => {
     if (!simData) return []
-    return aggregateSimByWeek(simData)
-  }, [simData])
+    const simByWeek = {}
+    for (const row of aggregateSimByWeek(simData)) {
+      simByWeek[row.week] = row
+    }
+    const allWeeks = new Set([...Object.keys(historyByWeek), ...Object.keys(simByWeek)])
+    return Array.from(allWeeks).sort().map((week) => ({
+      week,
+      actual_qty: historyByWeek[week] ?? null,
+      inv: simByWeek[week]?.inv ?? null,
+      forecast: simByWeek[week]?.forecast ?? null,
+      purchase_qty: simByWeek[week]?.purchase_qty ?? null,
+      lost_sale: simByWeek[week]?.lost_sale ?? null,
+    }))
+  }, [simData, historyByWeek])
+
+  const visibleData = useMemo(() => {
+    if (!zoomDomain) return chartData
+    return chartData.slice(zoomDomain[0], zoomDomain[1] + 1)
+  }, [chartData, zoomDomain])
 
   const tooltipStyle = {
     background: '#fff',
@@ -240,20 +364,62 @@ function SimulationTab({ item }) {
 
   return (
     <div className="fade-in">
+      {/* Params panel */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <button
+            type="button"
+            onClick={() => setShowParams((v) => !v)}
+            className="text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            {showParams ? 'Fela stillingar ▲' : 'Stillingar ▼'}
+          </button>
+          <button
+            type="button"
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending}
+            className="btn-primary text-sm py-1.5 px-4"
+          >
+            {mutation.isPending ? 'Keyri…' : 'Keyra hermun'}
+          </button>
+        </div>
+        {showParams && (
+          <div className="bg-gray-50 rounded-xl p-3 grid grid-cols-1 gap-2">
+            {SIM_PARAM_FIELDS.map(({ key, label, min, max, step }) => (
+              <div key={key} className="flex items-center justify-between gap-3">
+                <label className="text-xs text-gray-500 whitespace-nowrap">{label}</label>
+                <input
+                  type="number"
+                  min={min} max={max} step={step}
+                  value={params[key] ?? ''}
+                  placeholder={params[key] == null ? 'Sjálfgefið' : ''}
+                  onChange={(e) => setParams((p) => ({ ...p, [key]: e.target.value === '' ? null : Number(e.target.value) }))}
+                  className="input-field py-0.5 text-sm w-28 text-right"
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {!simData && !mutation.isPending && error && (
-        <div className="flex flex-col items-center justify-center py-12 text-center">
+        <div className="flex flex-col items-center justify-center py-8 text-center">
           <span className="text-3xl mb-3">⚠️</span>
           <p className="text-red-500 text-sm mb-4">{error}</p>
-          <button onClick={() => mutation.mutate()} className="btn-secondary text-sm">
-            Reyna aftur
-          </button>
+        </div>
+      )}
+
+      {!simData && !mutation.isPending && !error && (
+        <div className="flex flex-col items-center justify-center py-12 text-center text-gray-400">
+          <span className="text-4xl mb-3">🧮</span>
+          <p className="text-sm text-gray-500">Stilltu breytur og keyrðu hermun</p>
         </div>
       )}
 
       {mutation.isPending && (
         <div className="flex flex-col items-center justify-center py-12">
           <LoadingSpinner message="Keyri hermun…" />
-          <p className="text-xs text-gray-400 mt-3">900 dagar · 1000 hermar</p>
+          <p className="text-xs text-gray-400 mt-3">{params.number_of_days} dagar · {params.number_of_simulations} hermar</p>
         </div>
       )}
 
@@ -274,9 +440,36 @@ function SimulationTab({ item }) {
             ))}
           </div>
 
-          {/* Chart */}
+          {/* Series toggles */}
+          <div className="flex flex-wrap gap-2 mb-3">
+            {SIM_SERIES.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => setVisible((v) => ({ ...v, [s.key]: !v[s.key] }))}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors"
+                style={{
+                  borderColor: s.color,
+                  background: visible[s.key] ? s.color : 'transparent',
+                  color: visible[s.key] ? '#fff' : s.color,
+                }}
+              >
+                {s.label}
+              </button>
+            ))}
+            {zoomDomain && (
+              <button onClick={() => setZoomDomain(null)} className="ml-auto btn-secondary text-xs py-0.5 px-2">Zoom út</button>
+            )}
+          </div>
           <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+            <ComposedChart
+              data={visibleData}
+              margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp(chartData)}
+              style={{ userSelect: 'none' }}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f4f8" vertical={false} />
               <XAxis
                 dataKey="week"
@@ -293,19 +486,16 @@ function SimulationTab({ item }) {
                 tickFormatter={(v) => fmt(v)}
               />
               <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [fmt(v, 1), n]} />
-              <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
-              <Line type="monotone" dataKey="inv" name="Lager" stroke="#6366f1" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="forecast" name="Spá" stroke="#3b82f6" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-              <Line type="monotone" dataKey="purchase_qty" name="Kaup" stroke="#10b981" strokeWidth={1.5} dot={false} />
-            </LineChart>
+              {visible.actual_qty && <Bar dataKey="actual_qty" name="Saga" fill="#f97316" radius={[2, 2, 0, 0]} isAnimationActive={false} />}
+              {visible.forecast && <Bar dataKey="forecast" name="Spá" fill="#3b82f6" radius={[2, 2, 0, 0]} isAnimationActive={false} />}
+              {visible.inv && <Area type="stepAfter" dataKey="inv" name="Lager" stroke="#6366f1" fill="#6366f1" fillOpacity={0.15} strokeWidth={2} dot={false} isAnimationActive={false} />}
+              {visible.purchase_qty && <Bar dataKey="purchase_qty" name="Kaup" fill="#10b981" radius={[2, 2, 0, 0]} isAnimationActive={false} />}
+              {isSelecting && refAreaLeft && refAreaRight && (
+                <ReferenceArea x1={refAreaLeft} x2={refAreaRight} fill="#6366f1" fillOpacity={0.15} />
+              )}
+            </ComposedChart>
           </ResponsiveContainer>
 
-          <button
-            onClick={() => { setSimData(null); mutation.reset() }}
-            className="btn-secondary text-xs py-1 px-3 mt-4 w-full"
-          >
-            Keyra aftur
-          </button>
         </>
       )}
     </div>
@@ -331,6 +521,8 @@ export default function ItemsPage() {
   const [search, setSearch] = useState('')
   const [selectedItem, setSelectedItem] = useState(null)
   const [activeTab, setActiveTab] = useState('history')
+  const [viewMode, setViewMode] = useState('table')
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   const { data: itemsData, isLoading: itemsLoading } = useQuery({
     queryKey: ['items-all'],
@@ -365,41 +557,54 @@ export default function ItemsPage() {
             {itemsLoading ? 'Hleð…' : `${filteredItems.length} / ${allItems.length} hlutir`}
           </p>
         </div>
-        <div className="relative w-64">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">⌕</span>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setSelectedItem(null) }}
-            placeholder="Leita…"
-            className="input-field pl-8 py-1.5"
-          />
+        <div className="flex items-center gap-3">
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+            {[{ value: 'table', icon: '▤' }, { value: 'cards', icon: '⊞' }].map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setViewMode(opt.value)}
+                className={`px-3 py-1.5 text-sm transition-colors ${
+                  viewMode === opt.value ? 'bg-blue-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                {opt.icon}
+              </button>
+            ))}
+          </div>
+          <div className="relative w-64">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">⌕</span>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setSelectedItem(null) }}
+              placeholder="Leita…"
+              className="input-field pl-8 py-1.5"
+            />
+          </div>
         </div>
       </div>
 
       {/* Split layout */}
       <div className="flex gap-5 items-start">
-        {/* Left: Table */}
-        <div className="flex-1 min-w-0 card p-0 overflow-hidden">
+        {/* Left: Table or Cards */}
+        <div className="flex-1 min-w-0">
           {itemsLoading ? (
-            <div className="flex items-center justify-center py-20">
+            <div className="card flex items-center justify-center py-20">
               <LoadingSpinner message="Hleð hlutum…" />
             </div>
           ) : filteredItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="card flex flex-col items-center justify-center py-16 text-center">
               <span className="text-4xl mb-3">📭</span>
               <p className="text-gray-500">Engir hlutir fundust</p>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
+          ) : viewMode === 'table' ? (
+            <div className="card p-0 overflow-hidden overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-200">
                     {COLS.map((col) => (
-                      <th
-                        key={col.key}
-                        className={`table-header ${col.right ? 'text-right' : ''}`}
-                      >
+                      <th key={col.key} className={`table-header ${col.right ? 'text-right' : ''}`}>
                         {col.label}
                       </th>
                     ))}
@@ -413,16 +618,11 @@ export default function ItemsPage() {
                         key={item.id}
                         onClick={() => { setSelectedItem(isSelected ? null : item); setActiveTab('history') }}
                         className={`table-row transition-colors ${
-                          isSelected
-                            ? 'bg-blue-50 border-l-[3px] border-l-blue-500'
-                            : 'border-l-[3px] border-l-transparent'
+                          isSelected ? 'bg-blue-50 border-l-[3px] border-l-blue-500' : 'border-l-[3px] border-l-transparent'
                         }`}
                       >
                         {COLS.map((col) => (
-                          <td
-                            key={col.key}
-                            className={`table-cell ${col.right ? 'text-right' : ''}`}
-                          >
+                          <td key={col.key} className={`table-cell ${col.right ? 'text-right' : ''}`}>
                             {col.render(item[col.key])}
                           </td>
                         ))}
@@ -431,6 +631,80 @@ export default function ItemsPage() {
                   })}
                 </tbody>
               </table>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
+              {filteredItems.map((item) => {
+                const isSelected = selectedItem?.id === item.id
+                const miniData = isSelected && historiesData
+                  ? aggregateByMonth(historiesData.filter((h) => h.item_id === item.id)).slice(-24)
+                  : null
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => { setSelectedItem(isSelected ? null : item); setActiveTab('history') }}
+                    className={`bg-white rounded-xl border-2 p-4 cursor-pointer transition-all hover:shadow-md ${
+                      isSelected ? 'border-blue-500 shadow-md' : 'border-gray-100 hover:border-blue-200'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <span className="badge badge-blue font-mono text-xs">{item.item_number}</span>
+                      {item.purchasing_method && (
+                        <span className="text-xs text-gray-400 font-medium">{item.purchasing_method}</span>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium text-gray-800 leading-snug mb-1 line-clamp-2">
+                      {item.description?.trim() || '—'}
+                    </p>
+                    <p className="text-xs text-gray-400 mb-3">{item.location_name || '—'}</p>
+                    <div className="grid grid-cols-3 gap-1.5 text-center mb-3">
+                      <div className="bg-gray-50 rounded-lg py-1.5">
+                        <p className="text-xs text-gray-400 mb-0.5">Lager</p>
+                        <p className="text-sm font-semibold text-gray-700">{fmt(item.stock_level, 1)}</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg py-1.5">
+                        <p className="text-xs text-gray-400 mb-0.5">Notkun/ár</p>
+                        <p className="text-sm font-semibold text-gray-700">{fmt(item.last_year_usage)}</p>
+                      </div>
+                      <div className="bg-blue-50 rounded-lg py-1.5">
+                        <p className="text-xs text-blue-400 mb-0.5">Tillaga</p>
+                        <p className="text-sm font-semibold text-blue-700">{fmt(item.purchase_suggestion)}</p>
+                      </div>
+                    </div>
+                    {isSelected ? (
+                      miniData?.length > 0 ? (
+                        <div className="-mx-1">
+                          <p className="text-xs text-gray-400 mb-1 px-1">Saga (24 mán.)</p>
+                          <ResponsiveContainer width="100%" height={80}>
+                            <BarChart data={miniData} margin={{ top: 2, right: 4, left: -28, bottom: 0 }}>
+                              <XAxis dataKey="month" tick={{ fontSize: 8, fill: '#9ca3af' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                              <YAxis hide />
+                              <Tooltip
+                                contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '11px' }}
+                                formatter={(v) => [fmt(v, 1), 'Neysla']}
+                              />
+                              <Bar dataKey="qty" fill="#3b82f6" radius={[2, 2, 0, 0]} isAnimationActive={false} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      ) : (
+                        <div className="h-[80px] flex items-center justify-center text-xs text-gray-300 bg-gray-50 rounded-lg">
+                          {historiesLoading ? 'Hleð…' : 'Engin saga'}
+                        </div>
+                      )
+                    ) : (
+                      <div className="h-[50px] flex items-end gap-px px-1">
+                        {Array.from({ length: 12 }, (_, i) => {
+                          const seed = ((item.id ?? 0) * 31 + i * 17) % 100
+                          return (
+                            <div key={i} className="flex-1 bg-gray-100 rounded-sm" style={{ height: `${25 + Math.sin(i * 0.9 + seed) * 15 + (seed % 25)}%` }} />
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
@@ -444,10 +718,10 @@ export default function ItemsPage() {
             </div>
           ) : (
             <>
-              {/* Tabs */}
-              <div className="flex border-b border-gray-200 mb-5 -mx-6 px-6">
+              {/* Tabs + expand button */}
+              <div className="flex items-center border-b border-gray-200 mb-5 -mx-6 px-6">
                 {[
-                  { id: 'history', label: 'Neyslusaga' },
+                  { id: 'history', label: 'Saga' },
                   { id: 'simulation', label: 'Hermun' },
                 ].map((tab) => (
                   <button
@@ -462,21 +736,68 @@ export default function ItemsPage() {
                     {tab.label}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(true)}
+                  className="ml-auto mb-2 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+                >
+                  Opna stórt
+                </button>
               </div>
 
               {activeTab === 'history' ? (
-                <HistoryChart
-                  item={selectedItem}
-                  histories={historiesData?.rows}
-                  loading={historiesLoading}
-                />
+                <HistoryChart item={selectedItem} histories={historiesData} loading={historiesLoading} />
               ) : (
-                <SimulationTab key={selectedItem.id} item={selectedItem} />
+                <SimulationTab key={selectedItem.id} item={selectedItem} histories={historiesData || []} />
               )}
             </>
           )}
         </div>
       </div>
+
+      {/* Full-screen modal */}
+      {isModalOpen && selectedItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
+              <div>
+                <p className="text-sm text-gray-500 font-mono">
+                  <span className="font-semibold text-blue-600">{selectedItem.item_number}</span>
+                  {' · '}{selectedItem.description?.trim()}
+                  {' · '}{selectedItem.location_name}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                {[{ id: 'history', label: 'Saga' }, { id: 'simulation', label: 'Hermun' }].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      activeTab === tab.id ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                >
+                  Loka
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              {activeTab === 'history' ? (
+                <HistoryChart item={selectedItem} histories={historiesData} loading={historiesLoading} />
+              ) : (
+                <SimulationTab key={`modal-${selectedItem.id}`} item={selectedItem} histories={historiesData || []} />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

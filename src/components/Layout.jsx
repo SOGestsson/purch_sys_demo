@@ -11,6 +11,11 @@ const navItems = [
     labelKey: 'nav.dashboard',
   },
   {
+    to: '/catalog',
+    icon: '🗂',
+    labelKey: 'nav.catalog',
+  },
+  {
     to: '/items',
     icon: '▤',
     labelKey: 'nav.items',

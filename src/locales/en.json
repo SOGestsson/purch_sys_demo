@@ -7,7 +7,8 @@
     "noi": "Noi",
     "forecast": "Forecast",
     "settings": "Settings",
-    "logout": "Logout"
+    "logout": "Logout",
+    "catalog": "Item Catalog"
   },
   "common": {
     "loading": "Loading…",
