@@ -2,6 +2,7 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { getRow } from '../api/items.js'
+import { useDatabase } from '../context/DatabaseContext.jsx'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 
 function InfoRow({ label, value }) {
@@ -21,13 +22,14 @@ export default function ItemDetail() {
   const location = useLocation()
   const navigate = useNavigate()
 
+  const { selectedDb } = useDatabase()
   const passedRow = location.state?.row
   const passedTable = location.state?.table
 
   // Try to fetch row from db-api if we have a table name
   const { data: fetchedRow, isLoading: rowLoading } = useQuery({
-    queryKey: ['row', passedTable, id],
-    queryFn: () => getRow(passedTable, id),
+    queryKey: ['row', passedTable, id, selectedDb],
+    queryFn: () => getRow(passedTable, id, { db: selectedDb }),
     enabled: !!passedTable && !passedRow,
     retry: false,
   })

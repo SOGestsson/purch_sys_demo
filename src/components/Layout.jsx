@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useDatabase } from '../context/DatabaseContext.jsx'
 import LanguageSwitcher from './LanguageSwitcher.jsx'
 
 const navItems = [
@@ -53,6 +54,7 @@ function NavItem({ to, icon, label }) {
 export default function Layout() {
   const { t } = useTranslation()
   const { user, logout } = useAuth()
+  const { selectedDb, databases, selectDb } = useDatabase()
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -91,6 +93,22 @@ export default function Layout() {
 
       {/* Bottom section */}
       <div className="border-t border-slate-700/50 p-4 space-y-2">
+        {databases.length > 0 && (
+          <div className="px-2 py-1">
+            <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1.5">
+              {t('nav.database', 'Database')}
+            </p>
+            <select
+              value={selectedDb || ''}
+              onChange={(e) => selectDb(e.target.value)}
+              className="w-full bg-slate-800 text-slate-200 text-sm rounded-md px-2 py-1.5 border border-slate-600 focus:outline-none focus:border-blue-500"
+            >
+              {databases.map((d) => (
+                <option key={d.name} value={d.name}>{d.display_name}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <LanguageSwitcher compact />
         {/* User info */}
         <div className="flex items-center gap-3 px-2 py-2">

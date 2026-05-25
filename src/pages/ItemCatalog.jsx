@@ -2,6 +2,7 @@ import { Fragment, useState, useMemo, useRef, useCallback, useEffect } from 'rea
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { listRows, startMultiSimJob, getJobStatus, getSimPrep, getSimInput, updateRow } from '../api/items.js'
+import { useDatabase } from '../context/DatabaseContext.jsx'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import {
   ComposedChart, Bar, Line, Area, XAxis, YAxis, CartesianGrid,
@@ -448,7 +449,7 @@ function SimParamsControls({
   )
 }
 
-function SimPrepPanel({ item, simParams, setSimParams, savingServiceLevel, saveServiceLevel, controlsDisabled, onClose }) {
+function SimPrepPanel({ item, simParams, setSimParams, savingServiceLevel, saveServiceLevel, controlsDisabled, onClose, db = null }) {
   const queryClient = useQueryClient()
   const initialInventoryParams = useMemo(() => ({
     lead_time: item.del_time == null ? '' : String(item.del_time),
@@ -476,12 +477,12 @@ function SimPrepPanel({ item, simParams, setSimParams, savingServiceLevel, saveS
       savedInventoryParams.lead_time,
       savedInventoryParams.buy_freq,
     ],
-    queryFn: () => getSimPrep(item.id, simParams),
+    queryFn: () => getSimPrep(item.id, { ...simParams, db }),
     staleTime: 300_000,
   })
   const { data: simInputData, isLoading: isHistoryLoading } = useQuery({
     queryKey: ['sim-input-history', item.id, simParams.service_level, simParams.number_of_days, simParams.number_of_simulations],
-    queryFn: () => getSimInput(item.id, { ...simParams, db: 'Demo' }),
+    queryFn: () => getSimInput(item.id, { ...simParams, db }),
     staleTime: 300_000,
   })
 
@@ -507,7 +508,7 @@ function SimPrepPanel({ item, simParams, setSimParams, savingServiceLevel, saveS
       setSavingInventoryParams(true)
       setInventorySaveError('')
       try {
-        await updateRow('items', item.id, { del_time: leadTime, buy_freq: buyFreq }, { db: 'Demo' })
+        await updateRow('items', item.id, { del_time: leadTime, buy_freq: buyFreq }, { db })
         const nextSaved = { lead_time: String(leadTime), buy_freq: String(buyFreq) }
         setSavedInventoryParams(nextSaved)
         queryClient.invalidateQueries({ queryKey: ['items-catalog'] })
@@ -584,6 +585,7 @@ function SimPrepPanel({ item, simParams, setSimParams, savingServiceLevel, saveS
 export default function ItemCatalog() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { selectedDb } = useDatabase()
 
   // Filter state
   const [search, setSearch] = useState('')
@@ -623,8 +625,8 @@ export default function ItemCatalog() {
 
   // Data fetching
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['items-catalog'],
-    queryFn: () => listRows('items', { limit: 1000, offset: 0, db: 'Demo' }),
+    queryKey: ['items-catalog', selectedDb],
+    queryFn: () => listRows('items', { limit: 1000, offset: 0, db: selectedDb }),
     staleTime: 60_000,
   })
 
@@ -687,7 +689,7 @@ export default function ItemCatalog() {
     setSimJob({ status: 'starting', message: `Ræsi simulation fyrir ${itemIds.length} vörur…` })
     stopPolling()
     try {
-      const { job_id } = await startMultiSimJob(itemIds, simParams)
+      const { job_id } = await startMultiSimJob(itemIds, { ...simParams, db: selectedDb })
       setSimJob({ jobId: job_id, status: 'running', message: 'Simulation í gangi…' })
       pollRef.current = setInterval(async () => {
         try {
@@ -718,7 +720,7 @@ export default function ItemCatalog() {
     try {
       await Promise.all(
         filtered.map((row) =>
-          updateRow('items', row.id, { service_level: simParams.service_level }, { db: 'Demo' })
+          updateRow('items', row.id, { service_level: simParams.service_level }, { db: selectedDb })
         )
       )
       queryClient.invalidateQueries({ queryKey: ['items-catalog'] })
@@ -959,6 +961,7 @@ export default function ItemCatalog() {
                               saveServiceLevel={saveServiceLevel}
                               controlsDisabled={filtered.length === 0}
                               onClose={() => setSelectedItem(null)}
+                              db={selectedDb}
                             />
                           </div>
                         </td>

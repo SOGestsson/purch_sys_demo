@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { listRows, getSimInput, getForecastDirect, getRawSimulate } from '../api/items.js'
+import { useDatabase } from '../context/DatabaseContext.jsx'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import {
   XAxis,
@@ -528,7 +529,7 @@ const SERIES = [
   { key: 'forecast_band', label: 'Öryggismörk', color: '#10b981' },
 ]
 
-function SimulationPanel({ item, histories = [] }) {
+function SimulationPanel({ item, histories = [], db = null }) {
   const [simData, setSimData] = useState(null)
   const [error, setError] = useState('')
   const [groupBy, setGroupBy] = useState('week')
@@ -543,19 +544,20 @@ function SimulationPanel({ item, histories = [] }) {
   const setParam = (key, value) => setParams((p) => ({ ...p, [key]: value }))
 
   const { data: forecastData } = useQuery({
-    queryKey: ['sim-forecast', item.id, runParams.forecast_periods, runParams.freq, runParams.local_model, runParams.season_length],
+    queryKey: ['sim-forecast', item.id, runParams.forecast_periods, runParams.freq, runParams.local_model, runParams.season_length, db],
     queryFn: () => getForecastDirect(item.id, {
       forecast_periods: runParams.forecast_periods,
       mode: 'local',
       local_model: runParams.local_model,
       season_length: runParams.season_length,
       freq: runParams.freq,
+      db,
     }),
     enabled: !!item.id,
   })
 
   const mutation = useMutation({
-    mutationFn: () => getRawSimulate(item.id, { ...params, mode: 'local' }),
+    mutationFn: () => getRawSimulate(item.id, { ...params, mode: 'local', db }),
     retry: 2,
     onSuccess: (data) => {
       const result = data?.simulator_output ?? data
@@ -908,10 +910,10 @@ const COLS = [
   { key: 'purchase_suggestion', label: 'Tillaga', render: (v) => <span className="font-mono font-semibold text-blue-700">{fmt(v)}</span>, right: true },
 ]
 
-async function fetchNoisItems() {
+async function fetchNoisItems(db) {
   const [page1, page2] = await Promise.all([
-    listRows('items', { limit: 1000, offset: 10000 }),
-    listRows('items', { limit: 1000, offset: 11000 }),
+    listRows('items', { limit: 1000, offset: 10000, db }),
+    listRows('items', { limit: 1000, offset: 11000, db }),
   ])
   const rows = [...(page1.rows || []), ...(page2.rows || [])].filter(
     (r) => r.organisation === 'Noi',
@@ -929,19 +931,21 @@ export default function NoisPage() {
   const [itemNumberFilter, setItemNumberFilter] = useState('')
   const [descFilter, setDescFilter] = useState('')
   const [productGroupFilter, setProductGroupFilter] = useState('')
+  const { selectedDb } = useDatabase()
 
   const { data: allItems = [], isLoading } = useQuery({
-    queryKey: ['noi-items'],
-    queryFn: fetchNoisItems,
+    queryKey: ['noi-items', selectedDb],
+    queryFn: () => fetchNoisItems(selectedDb),
   })
 
   const { data: simInputData } = useQuery({
-    queryKey: ['noi-sim-input', selectedItem?.id],
+    queryKey: ['noi-sim-input', selectedItem?.id, selectedDb],
     queryFn: () =>
       getSimInput(selectedItem.id, {
         number_of_days: 3650,
         number_of_simulations: 1000,
         service_level: 0.95,
+        db: selectedDb,
       }),
     enabled: !!selectedItem,
   })
@@ -949,7 +953,7 @@ export default function NoisPage() {
   const histories = simInputData?.sim_input_his || []
 
   const { data: forecastData, isLoading: forecastLoading } = useQuery({
-    queryKey: ['noi-forecast-direct', selectedItem?.id],
+    queryKey: ['noi-forecast-direct', selectedItem?.id, selectedDb],
     queryFn: () =>
       getForecastDirect(selectedItem.id, {
         forecast_periods: 12,
@@ -957,6 +961,7 @@ export default function NoisPage() {
         local_model: 'auto_ets',
         season_length: 12,
         freq: 'M',
+        db: selectedDb,
       }),
     enabled: !!selectedItem,
   })
@@ -1272,7 +1277,7 @@ export default function NoisPage() {
               </div>
 
               {activeTab === 'simulation' && (
-                <SimulationPanel key={selectedItem.id} item={selectedItem} histories={histories} />
+                <SimulationPanel key={selectedItem.id} item={selectedItem} histories={histories} db={selectedDb} />
               )}
               {activeTab === 'json' && (
                 <ForecastJsonTab forecastData={forecastData} forecastLoading={forecastLoading} />

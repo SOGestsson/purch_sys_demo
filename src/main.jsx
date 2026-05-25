@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import App from './App.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
+import { DatabaseProvider } from './context/DatabaseContext.jsx'
 import './i18n.js'
 import './index.css'
 
@@ -23,7 +24,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <App />
+          <DatabaseProvider>
+            <App />
+          </DatabaseProvider>
         </AuthProvider>
         <ReactQueryDevtools initialIsOpen={false} />
       </QueryClientProvider>

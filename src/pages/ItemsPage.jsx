@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { listRows, getItemHistories, getSimInput, runSimulation } from '../api/items.js'
+import { useDatabase } from '../context/DatabaseContext.jsx'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import {
   AreaChart,
@@ -275,7 +276,7 @@ const SIM_PARAM_FIELDS = [
   { key: 'order_freq',            label: 'Pöntunartíðni (dagar)', min: 1,  max: 365,  step: 1    },
 ]
 
-function SimulationTab({ item, histories = [] }) {
+function SimulationTab({ item, histories = [], db = null }) {
   const [simData, setSimData] = useState(null)
   const [error, setError] = useState('')
   const [params, setParams] = useState(SIM_PARAMS_DEFAULT)
@@ -301,8 +302,8 @@ function SimulationTab({ item, histories = [] }) {
   }
 
   const { data: simDefaults } = useQuery({
-    queryKey: ['sim-defaults', item.id],
-    queryFn: () => getSimInput(item.id, { number_of_days: 1, number_of_simulations: 1 }),
+    queryKey: ['sim-defaults', item.id, db],
+    queryFn: () => getSimInput(item.id, { number_of_days: 1, number_of_simulations: 1, db }),
   })
 
   useEffect(() => {
@@ -317,7 +318,7 @@ function SimulationTab({ item, histories = [] }) {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const simInput = await getSimInput(item.id, params)
+      const simInput = await getSimInput(item.id, { ...params, db })
       return runSimulation(simInput)
     },
     onSuccess: (data) => {
@@ -523,15 +524,16 @@ export default function ItemsPage() {
   const [activeTab, setActiveTab] = useState('history')
   const [viewMode, setViewMode] = useState('table')
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const { selectedDb } = useDatabase()
 
   const { data: itemsData, isLoading: itemsLoading } = useQuery({
-    queryKey: ['items-all'],
-    queryFn: () => listRows('items', { limit: 200, offset: 0 }),
+    queryKey: ['items-all', selectedDb],
+    queryFn: () => listRows('items', { limit: 200, offset: 0, db: selectedDb }),
   })
 
   const { data: historiesData, isLoading: historiesLoading } = useQuery({
-    queryKey: ['item-histories', selectedItem?.id],
-    queryFn: () => getItemHistories(selectedItem.id),
+    queryKey: ['item-histories', selectedItem?.id, selectedDb],
+    queryFn: () => getItemHistories(selectedItem.id, { db: selectedDb }),
     enabled: !!selectedItem,
   })
 
@@ -748,7 +750,7 @@ export default function ItemsPage() {
               {activeTab === 'history' ? (
                 <HistoryChart item={selectedItem} histories={historiesData} loading={historiesLoading} />
               ) : (
-                <SimulationTab key={selectedItem.id} item={selectedItem} histories={historiesData || []} />
+                <SimulationTab key={selectedItem.id} item={selectedItem} histories={historiesData || []} db={selectedDb} />
               )}
             </>
           )}
@@ -792,7 +794,7 @@ export default function ItemsPage() {
               {activeTab === 'history' ? (
                 <HistoryChart item={selectedItem} histories={historiesData} loading={historiesLoading} />
               ) : (
-                <SimulationTab key={`modal-${selectedItem.id}`} item={selectedItem} histories={historiesData || []} />
+                <SimulationTab key={`modal-${selectedItem.id}`} item={selectedItem} histories={historiesData || []} db={selectedDb} />
               )}
             </div>
           </div>

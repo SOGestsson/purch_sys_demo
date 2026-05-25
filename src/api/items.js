@@ -1,5 +1,10 @@
 import { dbClient, simClient, pipelineClient } from './client.js'
 
+export async function listDatabases() {
+  const response = await dbClient.get('/databases')
+  return response.data?.databases || []
+}
+
 /**
  * List all tables in the database.
  */
@@ -11,7 +16,7 @@ export async function listTables() {
 /**
  * List rows from a specific table with optional pagination.
  */
-export async function listRows(tableName, { limit = 50, offset = 0, db = 'demo' } = {}) {
+export async function listRows(tableName, { limit = 50, offset = 0, db = null } = {}) {
   const response = await dbClient.get(`/tables/${tableName}/rows`, {
     params: { limit, offset, db },
   })
@@ -27,7 +32,7 @@ export async function listRows(tableName, { limit = 50, offset = 0, db = 'demo' 
 /**
  * Get a single row by ID.
  */
-export async function getRow(tableName, rowId, { db = 'demo' } = {}) {
+export async function getRow(tableName, rowId, { db = null } = {}) {
   const response = await dbClient.get(`/tables/${tableName}/rows/${rowId}`, { params: { db } })
   return response.data?.row || response.data
 }
@@ -35,7 +40,7 @@ export async function getRow(tableName, rowId, { db = 'demo' } = {}) {
 /**
  * Create a new row in a table.
  */
-export async function createRow(tableName, data, { db = 'demo' } = {}) {
+export async function createRow(tableName, data, { db = null } = {}) {
   const response = await dbClient.post(`/tables/${tableName}/rows`, data, { params: { db } })
   return response.data
 }
@@ -43,7 +48,7 @@ export async function createRow(tableName, data, { db = 'demo' } = {}) {
 /**
  * Update an existing row.
  */
-export async function updateRow(tableName, rowId, data, { db = 'demo' } = {}) {
+export async function updateRow(tableName, rowId, data, { db = null } = {}) {
   const response = await dbClient.put(`/tables/${tableName}/rows/${rowId}`, data, { params: { db } })
   return response.data
 }
@@ -51,7 +56,7 @@ export async function updateRow(tableName, rowId, data, { db = 'demo' } = {}) {
 /**
  * Delete a row.
  */
-export async function deleteRow(tableName, rowId, { db = 'demo' } = {}) {
+export async function deleteRow(tableName, rowId, { db = null } = {}) {
   const response = await dbClient.delete(`/tables/${tableName}/rows/${rowId}`, { params: { db } })
   return response.data
 }
@@ -60,13 +65,13 @@ export async function deleteRow(tableName, rowId, { db = 'demo' } = {}) {
  * Binary search to find the offset in item_histories where item_id first appears.
  * Histories are roughly sorted by item_id (~640k rows total).
  */
-async function findHistoryOffset(itemId, totalRows = 640000) {
+async function findHistoryOffset(itemId, db, totalRows = 640000) {
   let lo = 0
   let hi = totalRows
   while (lo < hi) {
     const mid = Math.floor((lo + hi) / 2)
     const data = await dbClient.get('/tables/item_histories/rows', {
-      params: { limit: 1, offset: mid, db: 'demo' },
+      params: { limit: 1, offset: mid, db },
     })
     const row = data.data?.rows?.[0]
     if (!row) { hi = mid; continue }
@@ -79,11 +84,11 @@ async function findHistoryOffset(itemId, totalRows = 640000) {
 /**
  * Fetch all history rows for a specific item_id using binary search.
  */
-export async function getItemHistories(itemId) {
-  const startOffset = await findHistoryOffset(itemId)
+export async function getItemHistories(itemId, { db = null } = {}) {
+  const startOffset = await findHistoryOffset(itemId, db)
   const safeOffset = Math.max(0, startOffset - 50)
   const response = await dbClient.get('/tables/item_histories/rows', {
-    params: { limit: 1000, offset: safeOffset, db: 'demo' },
+    params: { limit: 1000, offset: safeOffset, db },
   })
   const rows = response.data?.rows || []
   return rows.filter((r) => r.item_id === itemId)
@@ -102,7 +107,7 @@ export async function getSimInput(
     order_freq,
     start_day,
     end_day,
-    db = 'demo',
+    db = null,
   } = {},
 ) {
   const response = await dbClient.get(`/sim-input/${itemId}`, {
@@ -139,7 +144,7 @@ export async function getForecastInput(
     freq = 'M',
     start_day,
     end_day,
-    db = 'demo',
+    db = null,
   } = {},
 ) {
   const response = await dbClient.get(`/forecast-input/${itemId}`, {
@@ -180,7 +185,7 @@ export async function runSimulation(simInput) {
 export async function getForecastDirect(
   itemId,
   {
-    db = 'demo',
+    db = null,
     forecast_periods = 6,
     mode = 'local',
     local_model = 'auto_ets',
@@ -201,6 +206,7 @@ export async function getForecastDirect(
 export async function getRawSimulate(
   itemId,
   {
+    db = null,
     order_freq = 30,
     lead_time = 30,
     service_level = 0.95,
@@ -212,12 +218,12 @@ export async function getRawSimulate(
   } = {},
 ) {
   const response = await pipelineClient.post(`/simulation/raw-simulate/${itemId}`, null, {
-    params: { db: 'demo', order_freq, lead_time, service_level, forecast_periods, mode, local_model, season_length, freq },
+    params: { db, order_freq, lead_time, service_level, forecast_periods, mode, local_model, season_length, freq },
   })
   return response.data
 }
 
-export async function getSimPrep(itemId, { db = 'Demo', number_of_simulations = 500, number_of_days = 900, service_level = 0.95 } = {}) {
+export async function getSimPrep(itemId, { db = null, number_of_simulations = 500, number_of_days = 900, service_level = 0.95 } = {}) {
   const response = await pipelineClient.get(`/simulation/sim-prep/${itemId}`, {
     params: { db, number_of_simulations, number_of_days, service_level },
     timeout: 120000,
@@ -225,7 +231,7 @@ export async function getSimPrep(itemId, { db = 'Demo', number_of_simulations = 
   return response.data
 }
 
-export async function startMultiSimJob(itemIds, { db = 'Demo', number_of_simulations = 1000, number_of_days = 900, service_level = 0.95 } = {}) {
+export async function startMultiSimJob(itemIds, { db = null, number_of_simulations = 1000, number_of_days = 900, service_level = 0.95 } = {}) {
   const params = new URLSearchParams()
   itemIds.forEach((id) => params.append('item_ids', id))
   params.append('db', db)

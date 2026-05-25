@@ -3,12 +3,14 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { listTables, listRows } from '../api/items.js'
+import { useDatabase } from '../context/DatabaseContext.jsx'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 
 const PAGE_SIZE = 20
 
 export default function Items() {
   const { t } = useTranslation()
+  const { selectedDb } = useDatabase()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -34,8 +36,8 @@ export default function Items() {
     isLoading: rowsLoading,
     isError: rowsError,
   } = useQuery({
-    queryKey: ['rows', selectedTable, page],
-    queryFn: () => listRows(selectedTable, { limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
+    queryKey: ['rows', selectedTable, page, selectedDb],
+    queryFn: () => listRows(selectedTable, { limit: PAGE_SIZE, offset: page * PAGE_SIZE, db: selectedDb }),
     enabled: !!selectedTable,
   })
 
