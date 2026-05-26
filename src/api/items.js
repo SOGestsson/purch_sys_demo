@@ -16,9 +16,9 @@ export async function listTables() {
 /**
  * List rows from a specific table with optional pagination.
  */
-export async function listRows(tableName, { limit = 50, offset = 0, db = null } = {}) {
+export async function listRows(tableName, { limit = 50, offset = 0, db = null, stock_out = false } = {}) {
   const response = await dbClient.get(`/tables/${tableName}/rows`, {
-    params: { limit, offset, db },
+    params: { limit, offset, db, ...(stock_out && { stock_out: true }) },
   })
   const data = response.data
   return {

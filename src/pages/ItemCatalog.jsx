@@ -225,7 +225,43 @@ function buildSimulatorChartData(data, historyRows = []) {
     )
 }
 
-function SimulatorResultChart({ data, historyRows }) {
+const ORDERING_COST = 90
+const HOLDING_RATE = 0.18
+
+function CostSummary({ data, item }) {
+  const simResult = data?.sim_result || []
+  if (!simResult.length) return null
+
+  const unitCost = Number(item?.unit_cost ?? item?.price ?? 0)
+  const invValues = simResult.map((r) => Number(r.inv ?? 0)).filter((v) => !isNaN(v))
+  const avgInv = invValues.length ? invValues.reduce((a, b) => a + b, 0) / invValues.length : 0
+  const nDays = simResult.length
+  const holdingCost = HOLDING_RATE * avgInv * unitCost * (nDays / 365)
+  const nOrders = simResult.filter((r) => Number(r.purchase_qty) > 0).length
+  const orderingCost = nOrders * ORDERING_COST
+  const totalCost = holdingCost + orderingCost
+  const stockoutDays = simResult.filter((r) => Number(r.lost_sale ?? 0) > 0).length
+
+  const Cell = ({ label, value, sub, accent }) => (
+    <div className="flex flex-col">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{label}</span>
+      <span className={`text-sm font-semibold ${accent || 'text-gray-800'}`}>{value}</span>
+      {sub && <span className="text-[10px] text-gray-400">{sub}</span>}
+    </div>
+  )
+
+  return (
+    <div className="xl:col-span-2 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 px-3 py-2.5 bg-gray-50 rounded-lg border border-gray-100 text-sm">
+      <Cell label="Fjöldi vantana" value={stockoutDays} accent={stockoutDays > 0 ? 'text-red-600' : 'text-green-600'} />
+      <Cell label="Meðalbrigðar" value={fmt(avgInv, 1)} sub={unitCost ? `× ${fmt(unitCost, 0)} USD` : ''} />
+      <Cell label="Fjárbindingarkostn." value={`${fmt(holdingCost, 0)} USD`} sub={`${HOLDING_RATE * 100}% / ár`} />
+      <Cell label="Pöntunarkostn." value={`${fmt(orderingCost, 0)} USD`} sub={`${nOrders} pantanir × ${ORDERING_COST} USD`} />
+      <Cell label="Heildarkostn." value={`${fmt(totalCost, 0)} USD`} accent="text-blue-700" />
+    </div>
+  )
+}
+
+function SimulatorResultChart({ data, historyRows, item }) {
   const [visible, setVisible] = useState(() => ({
     inventory_level: true,
     forecast: true,
@@ -327,6 +363,14 @@ function SimulatorResultChart({ data, historyRows }) {
           {visible.deliveries && <Bar dataKey="deliveries" name="Deliveries" fill="#16a34a" fillOpacity={0.9} shape={<WideBarShape barWidth={barWidths.deliveries} />} />}
           {visible.history && <Bar dataKey="history" name="History" fill="#2563eb" fillOpacity={0.9} shape={<WideBarShape barWidth={barWidths.history} />} />}
           {visible.purchase_qty && <Bar dataKey="purchase_qty" name="Purchase_qty" fill="#15803d" fillOpacity={0.9} shape={<WideBarShape barWidth={barWidths.purchase_qty} />} />}
+          {item?.purchasing_method?.toLowerCase().includes('min') && item?.min != null && (
+            <ReferenceLine y={Number(item.min)} stroke="#6366f1" strokeDasharray="5 3" strokeWidth={1.5}
+              label={{ value: `Min ${fmt(item.min)}`, position: 'insideTopRight', fill: '#6366f1', fontSize: 10 }} />
+          )}
+          {item?.purchasing_method?.toLowerCase().includes('min') && item?.max != null && (
+            <ReferenceLine y={Number(item.max)} stroke="#ec4899" strokeDasharray="5 3" strokeWidth={1.5}
+              label={{ value: `Max ${fmt(item.max)}`, position: 'insideTopRight', fill: '#ec4899', fontSize: 10 }} />
+          )}
         </ComposedChart>
       </ResponsiveContainer>
       <div className="mt-2 flex items-center justify-center gap-4 flex-wrap text-xs">
@@ -460,12 +504,62 @@ function SimPrepPanel({ item, simParams, setSimParams, savingServiceLevel, saveS
   const [savingInventoryParams, setSavingInventoryParams] = useState(false)
   const [inventorySaveError, setInventorySaveError] = useState('')
 
+  const initialMethodParams = useMemo(() => ({
+    purchasing_method: item.purchasing_method || '',
+    min: item.min == null ? '' : String(item.min),
+    max: item.max == null ? '' : String(item.max),
+  }), [item.id, item.purchasing_method, item.min, item.max])
+  const [methodParams, setMethodParams] = useState(initialMethodParams)
+  const [savedMethodParams, setSavedMethodParams] = useState(initialMethodParams)
+  const [savingMethod, setSavingMethod] = useState(false)
+  const [methodSaveError, setMethodSaveError] = useState('')
+
   useEffect(() => {
     setInventoryParams(initialInventoryParams)
     setSavedInventoryParams(initialInventoryParams)
     setSavingInventoryParams(false)
     setInventorySaveError('')
   }, [initialInventoryParams])
+
+  useEffect(() => {
+    setMethodParams(initialMethodParams)
+    setSavedMethodParams(initialMethodParams)
+    setSavingMethod(false)
+    setMethodSaveError('')
+  }, [initialMethodParams])
+
+  useEffect(() => {
+    const isMinMax = methodParams.purchasing_method?.toLowerCase().includes('min')
+    const minVal = isMinMax ? Number(methodParams.min) : null
+    const maxVal = isMinMax ? Number(methodParams.max) : null
+
+    if (
+      methodParams.purchasing_method === savedMethodParams.purchasing_method &&
+      methodParams.min === savedMethodParams.min &&
+      methodParams.max === savedMethodParams.max
+    ) return
+
+    if (isMinMax && (methodParams.min === '' || methodParams.max === '' || isNaN(minVal) || isNaN(maxVal))) return
+
+    const timeout = setTimeout(async () => {
+      setSavingMethod(true)
+      setMethodSaveError('')
+      try {
+        const payload = { purchasing_method: methodParams.purchasing_method }
+        if (isMinMax) { payload.min = minVal; payload.max = maxVal }
+        await updateRow('items', item.id, payload, { db })
+        setSavedMethodParams({ ...methodParams })
+        queryClient.invalidateQueries({ queryKey: ['items-catalog'] })
+        queryClient.invalidateQueries({ queryKey: ['sim-prep', item.id] })
+      } catch (err) {
+        setMethodSaveError(err?.response?.data?.detail || err.message || 'Villa við vistun')
+      } finally {
+        setSavingMethod(false)
+      }
+    }, 700)
+
+    return () => clearTimeout(timeout)
+  }, [methodParams, savedMethodParams, item.id, queryClient])
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [
@@ -476,6 +570,7 @@ function SimPrepPanel({ item, simParams, setSimParams, savingServiceLevel, saveS
       simParams.number_of_simulations,
       savedInventoryParams.lead_time,
       savedInventoryParams.buy_freq,
+      savedMethodParams.purchasing_method,
     ],
     queryFn: () => getSimPrep(item.id, { ...simParams, db }),
     staleTime: 300_000,
@@ -544,6 +639,52 @@ function SimPrepPanel({ item, simParams, setSimParams, savingServiceLevel, saveS
         disabled={controlsDisabled}
       />
 
+      <div className="flex flex-wrap items-end gap-4 mb-3 pb-3 border-b border-gray-100">
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Innkaupaaðferð</label>
+          <div className="flex gap-3">
+            {['min-max', 'low sale'].map((method) => (
+              <label key={method} className="flex items-center gap-1.5 cursor-pointer text-sm text-gray-700">
+                <input
+                  type="radio"
+                  name={`method-${item.id}`}
+                  checked={methodParams.purchasing_method?.toLowerCase() === method}
+                  onChange={() => setMethodParams((p) => ({ ...p, purchasing_method: method }))}
+                  className="accent-blue-600"
+                />
+                {method === 'min-max' ? 'Min-Max' : 'Low Sale'}
+              </label>
+            ))}
+          </div>
+        </div>
+        {methodParams.purchasing_method?.toLowerCase().includes('min') && (
+          <>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-medium text-indigo-500 uppercase tracking-wide">Min</label>
+              <input
+                type="number" min="0" step="1"
+                value={methodParams.min}
+                onChange={(e) => setMethodParams((p) => ({ ...p, min: e.target.value }))}
+                className="input-field py-1.5 w-24 text-sm border-indigo-200 focus:border-indigo-400"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-medium text-pink-500 uppercase tracking-wide">Max</label>
+              <input
+                type="number" min="0" step="1"
+                value={methodParams.max}
+                onChange={(e) => setMethodParams((p) => ({ ...p, max: e.target.value }))}
+                className="input-field py-1.5 w-24 text-sm border-pink-200 focus:border-pink-400"
+              />
+            </div>
+          </>
+        )}
+        <div className="pb-1 text-xs">
+          {savingMethod && <span className="text-blue-500">Vista…</span>}
+          {!savingMethod && methodSaveError && <span className="text-red-500">{methodSaveError}</span>}
+        </div>
+      </div>
+
       {isLoading && (
         <div className="flex items-center justify-center py-12">
           <LoadingSpinner message="Sæki histogram gögn…" />
@@ -554,7 +695,8 @@ function SimPrepPanel({ item, simParams, setSimParams, savingServiceLevel, saveS
       )}
       {data && (
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)] gap-4 items-start min-w-0 overflow-hidden">
-          <SimulatorResultChart data={data} historyRows={simInputData?.sim_input_his || []} />
+          <SimulatorResultChart data={data} historyRows={simInputData?.sim_input_his || []} item={{ ...item, ...methodParams }} />
+          <CostSummary data={data} item={item} />
           {isHistoryLoading && (
             <p className="xl:col-span-2 text-xs text-gray-400 -mt-3">
               Sæki sögu úr item_histories…
@@ -624,9 +766,10 @@ export default function ItemCatalog() {
   }, [selectedItem])
 
   // Data fetching
+  const isStockOutFilter = filterStock === 'out_of_stock'
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['items-catalog', selectedDb],
-    queryFn: () => listRows('items', { limit: 1000, offset: 0, db: selectedDb }),
+    queryKey: ['items-catalog', selectedDb, isStockOutFilter],
+    queryFn: () => listRows('items', { limit: 1000, offset: 0, db: selectedDb, stock_out: isStockOutFilter }),
     staleTime: 60_000,
   })
 
@@ -650,7 +793,6 @@ export default function ItemCatalog() {
     if (filterMethod) rows = rows.filter((r) => r.purchasing_method === filterMethod)
     if (filterOrg) rows = rows.filter((r) => r.organisation === filterOrg)
     if (filterStock === 'in_stock') rows = rows.filter((r) => Number(r.stock_level) > 0)
-    if (filterStock === 'out_of_stock') rows = rows.filter((r) => !r.stock_level || Number(r.stock_level) === 0)
     if (filterStock === 'on_order') rows = rows.filter((r) => Number(r.qty_on_order) > 0)
 
     if (filterMoves.size > 0) {
@@ -828,7 +970,7 @@ export default function ItemCatalog() {
               {[
                 { val: '', label: 'Allt' },
                 { val: 'in_stock', label: 'Á lager' },
-                { val: 'out_of_stock', label: 'Uppurið' },
+                { val: 'out_of_stock', label: 'Zero stock' },
                 { val: 'on_order', label: 'Á pöntun' },
               ].map(({ val, label }) => (
                 <button key={val} onClick={() => handleFilter(setFilterStock)(val)}
