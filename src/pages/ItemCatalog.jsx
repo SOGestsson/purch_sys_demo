@@ -236,11 +236,12 @@ function CostSummary({ data, item }) {
   const invValues = simResult.map((r) => Number(r.inv ?? 0)).filter((v) => !isNaN(v))
   const avgInv = invValues.length ? invValues.reduce((a, b) => a + b, 0) / invValues.length : 0
   const nDays = simResult.length
-  const holdingCost = HOLDING_RATE * avgInv * unitCost * (nDays / 365)
+  const holdingCostPerYear = HOLDING_RATE * avgInv * unitCost
   const nOrders = simResult.filter((r) => Number(r.purchase_qty) > 0).length
-  const orderingCost = nOrders * ORDERING_COST
-  const totalCost = holdingCost + orderingCost
-  const stockoutDays = simResult.filter((r) => Number(r.lost_sale ?? 0) > 0).length
+  const ordersPerYear = nDays > 0 ? (nOrders / nDays) * 365 : 0
+  const orderingCostPerYear = ordersPerYear * ORDERING_COST
+  const totalCostPerYear = holdingCostPerYear + orderingCostPerYear
+  const stockoutDays = simResult.filter((r) => r.inv != null && Number(r.inv) <= 0).length
 
   const Cell = ({ label, value, sub, accent }) => (
     <div className="flex flex-col">
@@ -251,12 +252,13 @@ function CostSummary({ data, item }) {
   )
 
   return (
-    <div className="xl:col-span-2 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 px-3 py-2.5 bg-gray-50 rounded-lg border border-gray-100 text-sm">
+    <div className="xl:col-span-2 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 px-3 py-2.5 bg-gray-50 rounded-lg border border-gray-100 text-sm">
       <Cell label="Fjöldi vantana" value={stockoutDays} accent={stockoutDays > 0 ? 'text-red-600' : 'text-green-600'} />
-      <Cell label="Meðalbrigðar" value={fmt(avgInv, 1)} sub={unitCost ? `× ${fmt(unitCost, 0)} USD` : ''} />
-      <Cell label="Fjárbindingarkostn." value={`${fmt(holdingCost, 0)} USD`} sub={`${HOLDING_RATE * 100}% / ár`} />
-      <Cell label="Pöntunarkostn." value={`${fmt(orderingCost, 0)} USD`} sub={`${nOrders} pantanir × ${ORDERING_COST} USD`} />
-      <Cell label="Heildarkostn." value={`${fmt(totalCost, 0)} USD`} accent="text-blue-700" />
+      <Cell label="Einingaverð" value={unitCost ? `${fmt(unitCost, 2)} USD` : '—'} />
+      <Cell label="Meðalbrigðar" value={fmt(avgInv, 1)} />
+      <Cell label="Fjárbindingarkostn. / ár" value={`${fmt(holdingCostPerYear, 0)} USD`} sub={`${HOLDING_RATE * 100}% × meðalbrigðar`} />
+      <Cell label="Pöntunarkostn. / ár" value={`${fmt(orderingCostPerYear, 0)} USD`} sub={`${fmt(ordersPerYear, 1)} pantanir × ${ORDERING_COST} USD`} />
+      <Cell label="Heildarkostn. / ár" value={`${fmt(totalCostPerYear, 0)} USD`} accent="text-blue-700" />
     </div>
   )
 }
@@ -696,12 +698,6 @@ function SimPrepPanel({ item, simParams, setSimParams, savingServiceLevel, saveS
       {data && (
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)] gap-4 items-start min-w-0 overflow-hidden">
           <SimulatorResultChart data={data} historyRows={simInputData?.sim_input_his || []} item={{ ...item, ...methodParams }} />
-          <CostSummary data={data} item={item} />
-          {isHistoryLoading && (
-            <p className="xl:col-span-2 text-xs text-gray-400 -mt-3">
-              Sæki sögu úr item_histories…
-            </p>
-          )}
           <div className="grid grid-cols-1 gap-3 min-w-0 overflow-hidden">
             <HistogramChart
               data={data.histo_with_cum_buy}
@@ -718,6 +714,12 @@ function SimPrepPanel({ item, simParams, setSimParams, savingServiceLevel, saveS
               compact
             />
           </div>
+          {isHistoryLoading && (
+            <p className="xl:col-span-2 text-xs text-gray-400 -mt-3">
+              Sæki sögu úr item_histories…
+            </p>
+          )}
+          <CostSummary data={data} item={item} />
         </div>
       )}
     </div>
@@ -807,9 +809,13 @@ export default function ItemCatalog() {
     if (filterSuggestion === 'has') rows = rows.filter((r) => Number(r.purchase_suggestion) > 0)
     if (filterSuggestion === 'none') rows = rows.filter((r) => !r.purchase_suggestion || Number(r.purchase_suggestion) === 0)
 
+    const getVal = (r) => {
+      if (sortCol === 'inventory_value') return Number(r.stock_level ?? 0) * Number(r.unit_cost ?? r.price ?? 0)
+      return r[sortCol] ?? ''
+    }
     return [...rows].sort((a, b) => {
-      const av = a[sortCol] ?? ''
-      const bv = b[sortCol] ?? ''
+      const av = getVal(a)
+      const bv = getVal(b)
       const an = Number(av)
       const bn = Number(bv)
       const cmp = !isNaN(an) && !isNaN(bn) ? an - bn : String(av).localeCompare(String(bv), 'is')
@@ -892,15 +898,14 @@ export default function ItemCatalog() {
   }
 
   const cols = [
-    { key: 'item_number', label: 'Vörunúmer' },
+    { key: 'item_number', label: 'Nr.' },
     { key: 'description', label: 'Lýsing' },
     { key: 'vendor_name', label: 'Birgir' },
-    { key: 'location_name', label: 'Staðsetning' },
+    { key: 'inventory_value', label: 'Birgðaverð.' },
     { key: 'stock_level', label: 'Birgðir' },
     { key: 'qty_on_order', label: 'Á pöntun' },
-    { key: 'purchase_suggestion', label: 'Pöntunarlegg.' },
     { key: 'purchasing_method', label: 'Aðferð' },
-    { key: 'last_year_usage', label: 'Not. s. ár' },
+    { key: 'last_year_usage', label: 'Not./ár' },
     { key: 'num_move_last_year', label: 'Hreyfingar' },
   ]
 
@@ -1046,8 +1051,8 @@ export default function ItemCatalog() {
             {hasFilters && <button onClick={clearFilters} className="mt-3 text-sm text-blue-500 hover:underline">Hreinsa filter</button>}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto [&_.table-header]:!px-2 [&_.table-header]:!py-2 [&_.table-cell]:!px-2 [&_.table-cell]:!py-2 [&_.table-cell]:!text-xs">
+            <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-gray-200">
                   {cols.map((col) => (
@@ -1066,15 +1071,14 @@ export default function ItemCatalog() {
                       className={`table-row cursor-pointer ${selectedItem?.id === row.id ? 'bg-blue-50' : ''}`}
                       onClick={() => setSelectedItem(selectedItem?.id === row.id ? null : row)}
                     >
-                      <td className="table-cell font-mono text-xs text-blue-600">{row.item_number || '—'}</td>
-                      <td className="table-cell"><span className="truncate block max-w-xs" title={row.description}>{row.description || '—'}</span></td>
-                      <td className="table-cell text-gray-600">{row.vendor_name || '—'}</td>
-                      <td className="table-cell">{row.location_name || '—'}</td>
+                      <td className="table-cell font-mono text-blue-600">{row.item_number || '—'}</td>
+                      <td className="table-cell"><span className="truncate block max-w-[12rem]" title={row.description}>{row.description || '—'}</span></td>
+                      <td className="table-cell text-gray-600 max-w-[8rem] truncate">{row.vendor_name || '—'}</td>
+                      <td className="table-cell text-right text-gray-700">{fmt(Number(row.stock_level ?? 0) * Number(row.unit_cost ?? row.price ?? 0), 0)}</td>
                       <td className="table-cell text-right"><StockBadge value={row.stock_level} /></td>
                       <td className="table-cell text-right text-gray-600">{fmt(row.qty_on_order)}</td>
-                      <td className="table-cell text-right font-medium text-blue-700">{fmt(row.purchase_suggestion)}</td>
                       <td className="table-cell">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">{row.purchasing_method || '—'}</span>
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-700 whitespace-nowrap">{row.purchasing_method || '—'}</span>
                       </td>
                       <td className="table-cell text-right text-gray-600">{fmt(row.last_year_usage)}</td>
                       <td className="table-cell text-right text-gray-600">{fmt(row.num_move_last_year)}</td>
