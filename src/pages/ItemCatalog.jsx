@@ -408,216 +408,168 @@ function SimulatorResultChart({ data, historyRows, item }) {
   )
 }
 
-function SimParamsControls({
-  simParams,
-  setSimParams,
-  inventoryParams,
-  setInventoryParams,
-  savingInventoryParams,
-  inventorySaveError,
-  savingServiceLevel,
-  saveServiceLevel,
-  disabled,
-}) {
+function SimParamsControls({ simParams, setSimParams, inventoryParams, setInventoryParams }) {
   const [serviceLevelInput, setServiceLevelInput] = useState(String(simParams.service_level))
   return (
-    <div className="border-y border-gray-100 py-2 mb-3">
-      <div className="flex flex-wrap gap-4 items-end">
-        <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Þjónustuhlutfall</label>
-          <div className="flex items-center gap-2">
-            <input
-              type="number" min="0.01" max="1" step="0.01"
-              value={serviceLevelInput}
-              onChange={(e) => setServiceLevelInput(e.target.value)}
-              onBlur={(e) => {
-                const v = parseFloat(e.target.value)
-                if (!isNaN(v) && v > 0 && v <= 1) {
-                  setSimParams((p) => ({ ...p, service_level: v }))
-                  setServiceLevelInput(String(v))
-                } else {
-                  setServiceLevelInput(String(simParams.service_level))
-                }
-              }}
-              className="input-field py-1.5 w-24 text-sm"
-            />
-            <button
-              onClick={saveServiceLevel}
-              disabled={savingServiceLevel || disabled}
-              className="px-3 py-1.5 text-sm font-medium bg-gray-100 hover:bg-gray-200 disabled:opacity-40 rounded-lg border border-gray-200 transition-colors"
-            >
-              {savingServiceLevel ? '…' : 'Vista'}
-            </button>
-          </div>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Fjöldi daga</label>
-          <input
-            type="number" min="1" step="1"
-            value={simParams.number_of_days}
-            onChange={(e) => setSimParams((p) => ({ ...p, number_of_days: parseInt(e.target.value) || 900 }))}
-            className="input-field py-1.5 w-28 text-sm"
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Fjöldi hermana</label>
-          <input
-            type="number" min="1" step="100"
-            value={simParams.number_of_simulations}
-            onChange={(e) => setSimParams((p) => ({ ...p, number_of_simulations: parseInt(e.target.value) || 1000 }))}
-            className="input-field py-1.5 w-28 text-sm"
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Lead time</label>
-          <input
-            type="number" min="0" step="1"
-            value={inventoryParams.lead_time}
-            onChange={(e) => setInventoryParams((p) => ({ ...p, lead_time: e.target.value }))}
-            className="input-field py-1.5 w-28 text-sm"
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Buy freq</label>
-          <input
-            type="number" min="1" step="1"
-            value={inventoryParams.buy_freq}
-            onChange={(e) => setInventoryParams((p) => ({ ...p, buy_freq: e.target.value }))}
-            className="input-field py-1.5 w-28 text-sm"
-          />
-        </div>
-        <div className="pb-2 text-xs min-w-28">
-          {savingInventoryParams && <span className="text-blue-500">Vista breytingar…</span>}
-          {!savingInventoryParams && inventorySaveError && <span className="text-red-500">{inventorySaveError}</span>}
-        </div>
+    <div className="flex flex-wrap gap-4 items-end">
+      <div className="flex flex-col gap-1">
+        <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Þjónustuhlutfall</label>
+        <input
+          type="number" min="0.01" max="1" step="0.01"
+          value={serviceLevelInput}
+          onChange={(e) => setServiceLevelInput(e.target.value)}
+          onBlur={(e) => {
+            const v = parseFloat(e.target.value)
+            if (!isNaN(v) && v > 0 && v <= 1) {
+              setSimParams((p) => ({ ...p, service_level: v }))
+              setServiceLevelInput(String(v))
+            } else {
+              setServiceLevelInput(String(simParams.service_level))
+            }
+          }}
+          className="input-field py-1.5 w-24 text-sm"
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Fjöldi daga</label>
+        <input
+          type="number" min="1" step="1"
+          value={simParams.number_of_days}
+          onChange={(e) => setSimParams((p) => ({ ...p, number_of_days: parseInt(e.target.value) || 900 }))}
+          className="input-field py-1.5 w-28 text-sm"
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Fjöldi hermana</label>
+        <input
+          type="number" min="1" step="100"
+          value={simParams.number_of_simulations}
+          onChange={(e) => setSimParams((p) => ({ ...p, number_of_simulations: parseInt(e.target.value) || 1000 }))}
+          className="input-field py-1.5 w-28 text-sm"
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Lead time</label>
+        <input
+          type="number" min="0" step="1"
+          value={inventoryParams.lead_time}
+          onChange={(e) => setInventoryParams((p) => ({ ...p, lead_time: e.target.value }))}
+          className="input-field py-1.5 w-28 text-sm"
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Buy freq</label>
+        <input
+          type="number" min="1" step="1"
+          value={inventoryParams.buy_freq}
+          onChange={(e) => setInventoryParams((p) => ({ ...p, buy_freq: e.target.value }))}
+          className="input-field py-1.5 w-28 text-sm"
+        />
       </div>
     </div>
   )
 }
 
-function SimPrepPanel({ item, simParams, setSimParams, savingServiceLevel, saveServiceLevel, controlsDisabled, onClose, db = null }) {
+function SimPrepPanel({ item, simParams, setSimParams, onClose, db = null }) {
   const queryClient = useQueryClient()
+
   const initialInventoryParams = useMemo(() => ({
     lead_time: item.del_time == null ? '' : String(item.del_time),
     buy_freq: item.buy_freq == null ? '' : String(item.buy_freq),
   }), [item.id, item.del_time, item.buy_freq])
-  const [inventoryParams, setInventoryParams] = useState(initialInventoryParams)
-  const [savedInventoryParams, setSavedInventoryParams] = useState(initialInventoryParams)
-  const [savingInventoryParams, setSavingInventoryParams] = useState(false)
-  const [inventorySaveError, setInventorySaveError] = useState('')
 
   const initialMethodParams = useMemo(() => ({
     purchasing_method: item.purchasing_method || '',
     min: item.min == null ? '' : String(item.min),
     max: item.max == null ? '' : String(item.max),
   }), [item.id, item.purchasing_method, item.min, item.max])
+
+  const [inventoryParams, setInventoryParams] = useState(initialInventoryParams)
   const [methodParams, setMethodParams] = useState(initialMethodParams)
-  const [savedMethodParams, setSavedMethodParams] = useState(initialMethodParams)
-  const [savingMethod, setSavingMethod] = useState(false)
-  const [methodSaveError, setMethodSaveError] = useState('')
+  const [savedParams, setSavedParams] = useState({
+    ...initialInventoryParams,
+    ...initialMethodParams,
+    service_level: simParams.service_level,
+    number_of_days: simParams.number_of_days,
+    number_of_simulations: simParams.number_of_simulations,
+  })
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   useEffect(() => {
     setInventoryParams(initialInventoryParams)
-    setSavedInventoryParams(initialInventoryParams)
-    setSavingInventoryParams(false)
-    setInventorySaveError('')
-  }, [initialInventoryParams])
-
-  useEffect(() => {
     setMethodParams(initialMethodParams)
-    setSavedMethodParams(initialMethodParams)
-    setSavingMethod(false)
-    setMethodSaveError('')
-  }, [initialMethodParams])
+    setSavedParams({
+      ...initialInventoryParams,
+      ...initialMethodParams,
+      service_level: simParams.service_level,
+      number_of_days: simParams.number_of_days,
+      number_of_simulations: simParams.number_of_simulations,
+    })
+    setSaving(false)
+    setSaveError('')
+  }, [item.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    const isMinMax = methodParams.purchasing_method?.toLowerCase().includes('min')
-    const minVal = isMinMax ? Number(methodParams.min) : null
-    const maxVal = isMinMax ? Number(methodParams.max) : null
-
-    if (
-      methodParams.purchasing_method === savedMethodParams.purchasing_method &&
-      methodParams.min === savedMethodParams.min &&
-      methodParams.max === savedMethodParams.max
-    ) return
-
-    if (isMinMax && (methodParams.min === '' || methodParams.max === '' || isNaN(minVal) || isNaN(maxVal))) return
-
-    const timeout = setTimeout(async () => {
-      setSavingMethod(true)
-      setMethodSaveError('')
-      try {
-        const payload = { purchasing_method: methodParams.purchasing_method }
-        if (isMinMax) { payload.min = minVal; payload.max = maxVal }
-        await updateRow('items', item.id, payload, { db })
-        setSavedMethodParams({ ...methodParams })
-        queryClient.invalidateQueries({ queryKey: ['items-catalog'] })
-        queryClient.invalidateQueries({ queryKey: ['sim-prep', item.id] })
-      } catch (err) {
-        setMethodSaveError(err?.response?.data?.detail || err.message || 'Villa við vistun')
-      } finally {
-        setSavingMethod(false)
+  const handleSaveAndRun = async () => {
+    setSaving(true)
+    setSaveError('')
+    try {
+      const isMinMax = methodParams.purchasing_method?.toLowerCase().includes('min')
+      const payload = {
+        service_level: simParams.service_level,
+        del_time: inventoryParams.lead_time !== '' ? Number(inventoryParams.lead_time) : undefined,
+        buy_freq: inventoryParams.buy_freq !== '' ? Number(inventoryParams.buy_freq) : undefined,
+        purchasing_method: methodParams.purchasing_method || undefined,
       }
-    }, 700)
-
-    return () => clearTimeout(timeout)
-  }, [methodParams, savedMethodParams, item.id, queryClient])
+      if (isMinMax && methodParams.min !== '' && methodParams.max !== '') {
+        payload.min = Number(methodParams.min)
+        payload.max = Number(methodParams.max)
+      }
+      await updateRow('items', item.id, payload, { db })
+      setSavedParams({
+        ...inventoryParams,
+        ...methodParams,
+        service_level: simParams.service_level,
+        number_of_days: simParams.number_of_days,
+        number_of_simulations: simParams.number_of_simulations,
+      })
+      queryClient.invalidateQueries({ queryKey: ['items-catalog'] })
+    } catch (err) {
+      setSaveError(err?.response?.data?.detail || err.message || 'Villa við vistun')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [
       'sim-prep',
       item.id,
-      simParams.service_level,
-      simParams.number_of_days,
-      simParams.number_of_simulations,
-      savedInventoryParams.lead_time,
-      savedInventoryParams.buy_freq,
-      savedMethodParams.purchasing_method,
+      savedParams.service_level,
+      savedParams.number_of_days,
+      savedParams.number_of_simulations,
+      savedParams.lead_time,
+      savedParams.buy_freq,
+      savedParams.purchasing_method,
     ],
-    queryFn: () => getSimPrep(item.id, { ...simParams, db }),
+    queryFn: () => getSimPrep(item.id, {
+      service_level: savedParams.service_level,
+      number_of_days: savedParams.number_of_days,
+      number_of_simulations: savedParams.number_of_simulations,
+      db,
+    }),
     staleTime: 300_000,
   })
   const { data: simInputData, isLoading: isHistoryLoading } = useQuery({
-    queryKey: ['sim-input-history', item.id, simParams.service_level, simParams.number_of_days, simParams.number_of_simulations],
-    queryFn: () => getSimInput(item.id, { ...simParams, db }),
+    queryKey: ['sim-input-history', item.id, savedParams.service_level, savedParams.number_of_days, savedParams.number_of_simulations],
+    queryFn: () => getSimInput(item.id, {
+      service_level: savedParams.service_level,
+      number_of_days: savedParams.number_of_days,
+      number_of_simulations: savedParams.number_of_simulations,
+      db,
+    }),
     staleTime: 300_000,
   })
-
-  useEffect(() => {
-    const leadTime = Number(inventoryParams.lead_time)
-    const buyFreq = Number(inventoryParams.buy_freq)
-    const savedLeadTime = Number(savedInventoryParams.lead_time)
-    const savedBuyFreq = Number(savedInventoryParams.buy_freq)
-
-    if (
-      inventoryParams.lead_time === '' ||
-      inventoryParams.buy_freq === '' ||
-      !Number.isFinite(leadTime) ||
-      !Number.isFinite(buyFreq) ||
-      leadTime < 0 ||
-      buyFreq < 1 ||
-      (leadTime === savedLeadTime && buyFreq === savedBuyFreq)
-    ) {
-      return undefined
-    }
-
-    const timeout = setTimeout(async () => {
-      setSavingInventoryParams(true)
-      setInventorySaveError('')
-      try {
-        await updateRow('items', item.id, { del_time: leadTime, buy_freq: buyFreq }, { db })
-        const nextSaved = { lead_time: String(leadTime), buy_freq: String(buyFreq) }
-        setSavedInventoryParams(nextSaved)
-        queryClient.invalidateQueries({ queryKey: ['items-catalog'] })
-      } catch (err) {
-        setInventorySaveError(err?.response?.data?.detail || err.message || 'Villa við vistun')
-      } finally {
-        setSavingInventoryParams(false)
-      }
-    }, 700)
-
-    return () => clearTimeout(timeout)
-  }, [inventoryParams, savedInventoryParams, item.id, queryClient])
 
   return (
     <div className="card border-t-2 border-blue-500">
@@ -629,22 +581,17 @@ function SimPrepPanel({ item, simParams, setSimParams, savingServiceLevel, saveS
         <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
       </div>
 
-      <SimParamsControls
-        simParams={simParams}
-        setSimParams={setSimParams}
-        inventoryParams={inventoryParams}
-        setInventoryParams={setInventoryParams}
-        savingInventoryParams={savingInventoryParams}
-        inventorySaveError={inventorySaveError}
-        savingServiceLevel={savingServiceLevel}
-        saveServiceLevel={saveServiceLevel}
-        disabled={controlsDisabled}
-      />
+      <div className="border-y border-gray-100 py-2 mb-3 flex flex-wrap gap-x-4 gap-y-3 items-end">
+        <SimParamsControls
+          simParams={simParams}
+          setSimParams={setSimParams}
+          inventoryParams={inventoryParams}
+          setInventoryParams={setInventoryParams}
+        />
 
-      <div className="flex flex-wrap items-end gap-4 mb-3 pb-3 border-b border-gray-100">
         <div className="flex flex-col gap-1">
           <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Innkaupaaðferð</label>
-          <div className="flex gap-3">
+          <div className="flex gap-3 py-1">
             {['min-max', 'low sale'].map((method) => (
               <label key={method} className="flex items-center gap-1.5 cursor-pointer text-sm text-gray-700">
                 <input
@@ -681,9 +628,16 @@ function SimPrepPanel({ item, simParams, setSimParams, savingServiceLevel, saveS
             </div>
           </>
         )}
-        <div className="pb-1 text-xs">
-          {savingMethod && <span className="text-blue-500">Vista…</span>}
-          {!savingMethod && methodSaveError && <span className="text-red-500">{methodSaveError}</span>}
+
+        <div className="ml-auto flex items-end gap-3 pb-0.5">
+          {saveError && <span className="text-xs text-red-500">{saveError}</span>}
+          <button
+            onClick={handleSaveAndRun}
+            disabled={saving}
+            className="px-4 py-1.5 text-sm font-medium bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg transition-colors shadow-sm"
+          >
+            {saving ? '…' : 'Vista & Keyra'}
+          </button>
         </div>
       </div>
 
@@ -750,7 +704,6 @@ export default function ItemCatalog() {
 
   // Simulation params
   const [simParams, setSimParams] = useState({ service_level: 0.95, number_of_days: 900, number_of_simulations: 1000 })
-  const [savingServiceLevel, setSavingServiceLevel] = useState(false)
 
   // Simulation job state
   const [simJob, setSimJob] = useState(null)
@@ -771,7 +724,7 @@ export default function ItemCatalog() {
   const isStockOutFilter = filterStock === 'out_of_stock'
   const { data, isLoading, isError } = useQuery({
     queryKey: ['items-catalog', selectedDb, isStockOutFilter],
-    queryFn: () => listRows('items', { limit: 1000, offset: 0, db: selectedDb, stock_out: isStockOutFilter }),
+    queryFn: () => listRows('items', { limit: 10000, offset: 0, db: selectedDb, stock_out: isStockOutFilter }),
     staleTime: 60_000,
   })
 
@@ -862,20 +815,6 @@ export default function ItemCatalog() {
       setSimJob({ status: 'error', message: err?.response?.data?.detail || err.message || 'Villa við að ræsa' })
     }
   }, [filtered, simParams, stopPolling, queryClient])
-
-  const saveServiceLevel = useCallback(async () => {
-    setSavingServiceLevel(true)
-    try {
-      await Promise.all(
-        filtered.map((row) =>
-          updateRow('items', row.id, { service_level: simParams.service_level }, { db: selectedDb })
-        )
-      )
-      queryClient.invalidateQueries({ queryKey: ['items-catalog'] })
-    } finally {
-      setSavingServiceLevel(false)
-    }
-  }, [filtered, simParams.service_level, queryClient])
 
   const handleSort = (col) => {
     if (sortCol === col) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -1103,9 +1042,6 @@ export default function ItemCatalog() {
                               item={selectedItem}
                               simParams={simParams}
                               setSimParams={setSimParams}
-                              savingServiceLevel={savingServiceLevel}
-                              saveServiceLevel={saveServiceLevel}
-                              controlsDisabled={filtered.length === 0}
                               onClose={() => setSelectedItem(null)}
                               db={selectedDb}
                             />
