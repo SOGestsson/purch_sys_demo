@@ -820,13 +820,16 @@ export default function ItemCatalog() {
 
     const needsDefaults = filtered.filter((r) => r.buy_freq == null || r.service_level == null)
     if (needsDefaults.length > 0) {
-      setSimJob({ status: 'starting', message: `Uppfæri ${needsDefaults.length} vörur með sjálfgildi…` })
-      await Promise.all(needsDefaults.map((r) => {
-        const payload = {}
-        if (r.buy_freq == null) payload.buy_freq = 30
-        if (r.service_level == null) payload.service_level = 0.975
-        return updateRow('items', r.id, payload, { db: selectedDb })
-      }))
+      for (let i = 0; i < needsDefaults.length; i += 50) {
+        const chunk = needsDefaults.slice(i, i + 50)
+        setSimJob({ status: 'starting', message: `Uppfæri sjálfgildi — ${Math.min(i + 50, needsDefaults.length)} / ${needsDefaults.length} vörur…` })
+        await Promise.all(chunk.map((r) => {
+          const payload = {}
+          if (r.buy_freq == null) payload.buy_freq = 30
+          if (r.service_level == null) payload.service_level = 0.975
+          return updateRow('items', r.id, payload, { db: selectedDb })
+        }))
+      }
       queryClient.invalidateQueries({ queryKey: ['items-catalog'] })
     }
 
