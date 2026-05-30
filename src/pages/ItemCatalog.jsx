@@ -784,37 +784,65 @@ export default function ItemCatalog() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
   }, [])
 
+  const SIM_BATCH_SIZE = 300
+
+  const pollUntilDone = useCallback((job_id) => new Promise((resolve, reject) => {
+    let pollErrors = 0
+    const interval = setInterval(async () => {
+      try {
+        const job = await getJobStatus(job_id)
+        pollErrors = 0
+        if (job.status === 'done') {
+          clearInterval(interval)
+          pollRef.current = null
+          resolve(job)
+        } else if (job.status === 'error') {
+          clearInterval(interval)
+          pollRef.current = null
+          reject(new Error(job.error || 'Óþekkt villa'))
+        }
+      } catch {
+        pollErrors += 1
+        if (pollErrors >= 3) {
+          clearInterval(interval)
+          pollRef.current = null
+          reject(new Error('Villa við að sækja stöðu'))
+        }
+      }
+    }, 8000)
+    pollRef.current = interval
+  }), [])
+
   const runSimulation = useCallback(async () => {
     const itemIds = filtered.map((r) => r.id).filter(Boolean)
     if (itemIds.length === 0) return
-    setSimJob({ status: 'starting', message: `Ræsi simulation fyrir ${itemIds.length} vörur…` })
     stopPolling()
-    try {
-      const { job_id } = await startMultiSimJob(itemIds, { ...simParams, db: selectedDb })
-      setSimJob({ jobId: job_id, status: 'running', message: 'Simulation í gangi…' })
-      pollRef.current = setInterval(async () => {
-        try {
-          const job = await getJobStatus(job_id)
-          if (job.status === 'done') {
-            stopPolling()
-            const saved = job.result?.sim_result?.saved ?? '?'
-            const updated = job.result?.purchase_suggestions?.updated ?? '?'
-            const timing = job.result?.timing_seconds?.total
-            setSimJob({ jobId: job_id, status: 'done', message: `Lokið — ${saved} línur vistaðar, ${updated} pöntunarleggur uppfærðir${timing ? ` (${timing}s)` : ''}` })
-            queryClient.invalidateQueries({ queryKey: ['items-catalog'] })
-          } else if (job.status === 'error') {
-            stopPolling()
-            setSimJob({ jobId: job_id, status: 'error', message: job.error || 'Óþekkt villa' })
-          }
-        } catch {
-          stopPolling()
-          setSimJob((prev) => ({ ...prev, status: 'error', message: 'Villa við að sækja stöðu' }))
-        }
-      }, 8000)
-    } catch (err) {
-      setSimJob({ status: 'error', message: err?.response?.data?.detail || err.message || 'Villa við að ræsa' })
+
+    const batches = []
+    for (let i = 0; i < itemIds.length; i += SIM_BATCH_SIZE) {
+      batches.push(itemIds.slice(i, i + SIM_BATCH_SIZE))
     }
-  }, [filtered, simParams, stopPolling, queryClient])
+
+    let totalSaved = 0
+    let totalUpdated = 0
+
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i]
+      setSimJob({ status: i === 0 ? 'starting' : 'running', message: `Lota ${i + 1} / ${batches.length} — ${batch.length} vörur (${totalSaved} línur vistaðar hingað til)…` })
+      try {
+        const { job_id } = await startMultiSimJob(batch, { ...simParams, db: selectedDb })
+        const job = await pollUntilDone(job_id)
+        totalSaved += job.result?.sim_result?.saved ?? 0
+        totalUpdated += job.result?.purchase_suggestions?.updated ?? 0
+      } catch (err) {
+        setSimJob({ status: 'error', message: `Lota ${i + 1}/${batches.length}: ${err?.response?.data?.detail || err.message}` })
+        return
+      }
+    }
+
+    setSimJob({ status: 'done', message: `Lokið — ${totalSaved} línur vistaðar, ${totalUpdated} pöntunarleggur uppfærðir` })
+    queryClient.invalidateQueries({ queryKey: ['items-catalog'] })
+  }, [filtered, simParams, stopPolling, pollUntilDone, queryClient, selectedDb])
 
   const handleSort = (col) => {
     if (sortCol === col) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
