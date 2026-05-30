@@ -232,13 +232,11 @@ export async function getSimPrep(itemId, { db = null, number_of_simulations = 50
 }
 
 export async function startMultiSimJob(itemIds, { db = null, number_of_simulations = 1000, number_of_days = 900, service_level = 0.95 } = {}) {
-  const params = new URLSearchParams()
-  itemIds.forEach((id) => params.append('item_ids', id))
-  params.append('db', db)
-  params.append('number_of_simulations', number_of_simulations)
-  params.append('number_of_days', number_of_days)
-  params.append('service_level', service_level)
-  const response = await pipelineClient.post(`/simulation/multi-sim/async?${params.toString()}`, null, { timeout: 15000 })
+  const response = await pipelineClient.post(
+    '/simulation/multi-sim/async',
+    { item_ids: itemIds },
+    { params: { db, number_of_simulations, number_of_days, service_level }, timeout: 15000 },
+  )
   return response.data
 }
 
