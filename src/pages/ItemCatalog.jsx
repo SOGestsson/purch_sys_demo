@@ -818,6 +818,18 @@ export default function ItemCatalog() {
     if (itemIds.length === 0) return
     stopPolling()
 
+    const needsDefaults = filtered.filter((r) => r.buy_freq == null || r.service_level == null)
+    if (needsDefaults.length > 0) {
+      setSimJob({ status: 'starting', message: `Uppfæri ${needsDefaults.length} vörur með sjálfgildi…` })
+      await Promise.all(needsDefaults.map((r) => {
+        const payload = {}
+        if (r.buy_freq == null) payload.buy_freq = 30
+        if (r.service_level == null) payload.service_level = 0.975
+        return updateRow('items', r.id, payload, { db: selectedDb })
+      }))
+      queryClient.invalidateQueries({ queryKey: ['items-catalog'] })
+    }
+
     const batches = []
     for (let i = 0; i < itemIds.length; i += SIM_BATCH_SIZE) {
       batches.push(itemIds.slice(i, i + SIM_BATCH_SIZE))
