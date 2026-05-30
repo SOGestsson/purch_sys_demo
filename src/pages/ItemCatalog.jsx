@@ -784,7 +784,7 @@ export default function ItemCatalog() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
   }, [])
 
-  const SIM_BATCH_SIZE = 300
+  const SIM_BATCH_SIZE = 100
 
   const pollUntilDone = useCallback((job_id) => new Promise((resolve, reject) => {
     let pollErrors = 0
@@ -834,6 +834,7 @@ export default function ItemCatalog() {
         const job = await pollUntilDone(job_id)
         totalSaved += job.result?.sim_result?.saved ?? 0
         totalUpdated += job.result?.purchase_suggestions?.updated ?? 0
+        await new Promise((r) => setTimeout(r, 3000))
       } catch (err) {
         setSimJob({ status: 'error', message: `Lota ${i + 1}/${batches.length}: ${err?.response?.data?.detail || err.message}` })
         return
