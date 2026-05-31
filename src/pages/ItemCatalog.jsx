@@ -33,6 +33,50 @@ function fmtAxisNumber(v) {
   return n.toLocaleString('is-IS', { maximumFractionDigits: Number.isInteger(n) ? 0 : 1 })
 }
 
+function EditableSuggestionCell({ rowId, value, db, onSaved }) {
+  const [input, setInput] = useState(value == null ? '' : String(value))
+  const [saving, setSaving] = useState(false)
+  const [dirty, setDirty] = useState(false)
+
+  useEffect(() => {
+    setInput(value == null ? '' : String(value))
+    setDirty(false)
+  }, [value])
+
+  const save = async () => {
+    if (!dirty) return
+    setSaving(true)
+    try {
+      await updateRow('items', rowId, { purchase_suggestion: input === '' ? null : Number(input) }, { db })
+      setDirty(false)
+      onSaved?.()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        type="number" min="0" step="1"
+        value={input}
+        onChange={(e) => { setInput(e.target.value); setDirty(true) }}
+        onKeyDown={(e) => e.key === 'Enter' && save()}
+        className="w-16 px-1 py-0.5 text-xs border border-gray-200 rounded focus:outline-none focus:border-blue-400 text-right"
+      />
+      {dirty && (
+        <button
+          onClick={save}
+          disabled={saving}
+          className="px-1.5 py-0.5 text-[10px] font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded transition-colors"
+        >
+          {saving ? '…' : 'Vista'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function StockBadge({ value }) {
   if (value == null) return <span className="text-gray-400">—</span>
   const n = Number(value)
@@ -1089,7 +1133,14 @@ export default function ItemCatalog() {
                       <td className="table-cell text-right text-gray-700">{fmt(Number(row.stock_level ?? 0) * Number(row.unit_cost ?? row.price ?? 0), 0)}</td>
                       <td className="table-cell text-right"><StockBadge value={row.stock_level} /></td>
                       <td className="table-cell text-right text-gray-600">{fmt(row.qty_on_order)}</td>
-                      <td className="table-cell text-right font-medium text-blue-700">{fmt(row.purchase_suggestion)}</td>
+                      <td className="table-cell">
+                        <EditableSuggestionCell
+                          rowId={row.id}
+                          value={row.purchase_suggestion}
+                          db={selectedDb}
+                          onSaved={() => queryClient.invalidateQueries({ queryKey: ['items-catalog'] })}
+                        />
+                      </td>
                       <td className="table-cell">
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-700 whitespace-nowrap">{row.purchasing_method || '—'}</span>
                       </td>
