@@ -887,7 +887,7 @@ export default function ItemCatalog() {
     { key: 'inventory_value', label: 'Birgðaverð.' },
     { key: 'stock_level', label: 'Birgðir' },
     { key: 'qty_on_order', label: 'Á pöntun' },
-    { key: 'purchase_suggestion', label: 'Pöntunarlegg.' },
+    { key: 'purchase_suggestion', label: 'Innkaupatillaga' },
     { key: 'purchasing_method', label: 'Aðferð' },
     { key: 'last_year_usage', label: 'Not./ár' },
     { key: 'num_move_last_year', label: 'Hreyfingar' },
