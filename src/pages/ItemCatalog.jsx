@@ -996,7 +996,7 @@ export default function ItemCatalog() {
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Pöntunarleggur</label>
+            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Innkaupatillaga</label>
             <div className="flex gap-1">
               {[
                 { val: '', label: 'Allt' },
