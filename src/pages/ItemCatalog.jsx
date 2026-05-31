@@ -887,6 +887,7 @@ export default function ItemCatalog() {
     { key: 'inventory_value', label: 'Birgðaverð.' },
     { key: 'stock_level', label: 'Birgðir' },
     { key: 'qty_on_order', label: 'Á pöntun' },
+    { key: 'purchase_suggestion', label: 'Pöntunarlegg.' },
     { key: 'purchasing_method', label: 'Aðferð' },
     { key: 'last_year_usage', label: 'Not./ár' },
     { key: 'num_move_last_year', label: 'Hreyfingar' },
@@ -1060,6 +1061,7 @@ export default function ItemCatalog() {
                       <td className="table-cell text-right text-gray-700">{fmt(Number(row.stock_level ?? 0) * Number(row.unit_cost ?? row.price ?? 0), 0)}</td>
                       <td className="table-cell text-right"><StockBadge value={row.stock_level} /></td>
                       <td className="table-cell text-right text-gray-600">{fmt(row.qty_on_order)}</td>
+                      <td className="table-cell text-right font-medium text-blue-700">{fmt(row.purchase_suggestion)}</td>
                       <td className="table-cell">
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-700 whitespace-nowrap">{row.purchasing_method || '—'}</span>
                       </td>
