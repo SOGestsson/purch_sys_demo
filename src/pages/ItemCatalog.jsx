@@ -1,4 +1,5 @@
 import { Fragment, useState, useMemo, useRef, useCallback, useEffect } from 'react'
+import * as XLSX from 'xlsx'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { listRows, startMultiSimJob, getJobStatus, getSimPrep, getSimInput, updateRow } from '../api/items.js'
@@ -893,6 +894,25 @@ export default function ItemCatalog() {
     { key: 'num_move_last_year', label: 'Hreyfingar' },
   ]
 
+  const exportToExcel = useCallback(() => {
+    const rows = filtered.map((r) => ({
+      'Nr.': r.item_number || '',
+      'Lýsing': r.description || '',
+      'Birgir': r.vendor_name || '',
+      'Birgðaverð.': Number(r.stock_level ?? 0) * Number(r.unit_cost ?? r.price ?? 0),
+      'Birgðir': r.stock_level ?? '',
+      'Á pöntun': r.qty_on_order ?? '',
+      'Innkaupatillaga': r.purchase_suggestion ?? '',
+      'Aðferð': r.purchasing_method || '',
+      'Not./ár': r.last_year_usage ?? '',
+      'Hreyfingar': r.num_move_last_year ?? '',
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Vörulisti')
+    XLSX.writeFile(wb, `vorulisti_${selectedDb || 'export'}.xlsx`)
+  }, [filtered, selectedDb])
+
   return (
     <div className="space-y-5 fade-in">
       {/* Header */}
@@ -919,6 +939,14 @@ export default function ItemCatalog() {
               <button onClick={() => { stopPolling(); setSimJob(null) }} className="ml-1 opacity-60 hover:opacity-100">✕</button>
             </div>
           )}
+          <button
+            onClick={exportToExcel}
+            disabled={filtered.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+          >
+            <span>⬇</span>
+            Excel
+          </button>
           <button
             onClick={runSimulation}
             disabled={filtered.length === 0 || simJob?.status === 'starting' || simJob?.status === 'running'}
